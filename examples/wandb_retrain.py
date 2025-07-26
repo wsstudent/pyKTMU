@@ -4,7 +4,7 @@ import json
 
 import torch
 
-# Set number of threads for PyTorch
+# 设置PyTorch的线程数
 torch.set_num_threads(4)
 from torch.optim import SGD, Adam
 import copy
@@ -14,7 +14,7 @@ from pykt.utils import debug_print, set_seed
 from pykt.datasets import init_dataset4train
 import datetime
 
-# Setup environment for CUDA debugging and reproducibility
+# 设置CUDA调试和可复现性的环境
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 device = "cpu" if not torch.cuda.is_available() else "cuda"
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:2"
@@ -22,7 +22,7 @@ os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:2"
 
 def save_config(train_config, model_config, data_config, params, save_dir):
     """
-    Saves training, model, data configurations, and hyperparameters to a json file.
+    将训练、模型、数据配置和超参数保存到json文件中。
     """
     d = {
         "train_config": train_config,
@@ -37,7 +37,7 @@ def save_config(train_config, model_config, data_config, params, save_dir):
 
 def main(params):
     """
-    Main retraining function.
+    主重训练函数。
     """
     if "use_wandb" not in params:
         params["use_wandb"] = 1
@@ -57,12 +57,12 @@ def main(params):
         params["save_dir"],
     )
 
-    debug_print(text="Loading configuration files.", fuc_name="main")
+    debug_print(text="加载配置文件。", fuc_name="main")
 
     with open("../configs/kt_config.json") as f:
         config = json.load(f)
         train_config = config["train_config"]
-        # Adjust batch_size for specific models to prevent OOM
+        # 为特定模型调整batch_size以防止内存溢出 (OOM)
         if model_name in [
             "dkvmn",
             "deep_irt",
@@ -115,39 +115,37 @@ def main(params):
     with open("../configs/data_config.json") as fin:
         data_config = json.load(fin)
 
-    # === Core logic for retraining ===
+    # === 重训练核心逻辑 ===
     if params.get("retrain_from_scratch"):
-        print("Retraining mode enabled. Modifying data loading path...")
+        print("重训练模式已启用。正在修改数据加载路径...")
         strategy = params["unlearn_strategy"]
         ratio = params["forget_ratio"]
 
-        # Construct the filename for the retained dataset
+        # 为保留的数据集构建文件名
         retrain_file_name = f"train_valid_sequences_retain_{strategy}_ratio{ratio}.csv"
 
-        # Check if the file exists
+        # 检查文件是否存在
         retrain_file_path = os.path.join(
             data_config[dataset_name]["dpath"], retrain_file_name
         )
         if not os.path.exists(retrain_file_path):
-            raise FileNotFoundError(
-                f"The specified retrain file does not exist: {retrain_file_path}"
-            )
+            raise FileNotFoundError(f"指定的重训练文件不存在: {retrain_file_path}")
 
-        # Overwrite the default training file with the retain set file
+        # 使用保留集文件覆盖默认的训练文件
         data_config[dataset_name]["train_valid_file"] = retrain_file_name
-        print(f"Switched training data to: {retrain_file_name}")
+        print(f"已切换训练数据至: {retrain_file_name}")
     # =================================
 
     if "maxlen" in data_config[dataset_name]:
         train_config["seq_len"] = data_config[dataset_name]["maxlen"]
     seq_len = train_config["seq_len"]
 
-    print("Initializing dataset")
+    print("正在初始化数据集")
     print(
-        f"Dataset: {dataset_name}, Model: {model_name}, Data Config: {data_config[dataset_name]}, Fold: {fold}, Batch Size: {batch_size}"
+        f"数据集: {dataset_name}, 模型: {model_name}, 数据配置: {data_config[dataset_name]}, 折: {fold}, 批大小: {batch_size}"
     )
 
-    debug_print(text="Initializing data loaders", fuc_name="main")
+    debug_print(text="正在初始化数据加载器", fuc_name="main")
     if model_name not in ["dimkt"]:
         train_loader, valid_loader, *_ = init_dataset4train(
             dataset_name, model_name, data_config, fold, batch_size
@@ -176,10 +174,10 @@ def main(params):
         os.makedirs(ckpt_path)
 
     print(
-        f"Start training model: {model_name}, emb_type: {emb_type}, save_dir: {ckpt_path}, dataset_name: {dataset_name}"
+        f"开始训练模型: {model_name}, 嵌入类型: {emb_type}, 保存目录: {ckpt_path}, 数据集名称: {dataset_name}"
     )
-    print(f"model_config: {model_config}")
-    print(f"train_config: {train_config}")
+    print(f"模型配置: {model_config}")
+    print(f"训练配置: {train_config}")
 
     if model_name in ["dimkt"]:
         del model_config["weight_decay"]
@@ -213,10 +211,10 @@ def main(params):
     ]:
         model_config["seq_len"] = seq_len
 
-    debug_print(text="Initializing model", fuc_name="main")
-    print(f"model_name: {model_name}")
+    debug_print(text="正在初始化模型", fuc_name="main")
+    print(f"模型名称: {model_name}")
     model = init_model(model_name, model_config, data_config[dataset_name], emb_type)
-    print(f"model: {model}")
+    print(f"模型: {model}")
 
     if model_name == "hawkes":
         weight_p, bias_p = [], []
@@ -230,7 +228,7 @@ def main(params):
     elif model_name == "iekt":
         opt = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-6)
     elif model_name == "dtransformer":
-        print(f"dtransformer with weight_decay=1e-5")
+        print(f"dtransformer 使用 weight_decay=1e-5")
         opt = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
     elif model_name == "dimkt":
         opt = torch.optim.Adam(
@@ -248,7 +246,7 @@ def main(params):
     best_epoch = -1
     save_model = True
 
-    debug_print(text="Training model", fuc_name="main")
+    debug_print(text="正在训练模型", fuc_name="main")
     if model_name == "rkt":
         (
             testauc,
@@ -300,7 +298,7 @@ def main(params):
         best_model.load_state_dict(net)
 
     print(
-        "fold\tmodel\temb_type\ttest_auc\ttest_acc\twindow_test_auc\twindow_test_acc\tvalid_auc\tvalid_acc\tbest_epoch"
+        "折\t模型\t嵌入类型\t测试AUC\t测试ACC\t窗口测试AUC\t窗口测试ACC\t验证AUC\t验证ACC\t最佳轮次"
     )
     print(
         str(fold)
@@ -324,7 +322,7 @@ def main(params):
         + str(best_epoch)
     )
     model_save_path = os.path.join(ckpt_path, emb_type + "_model.ckpt")
-    print(f"end time: {datetime.datetime.now()}")
+    print(f"结束时间: {datetime.datetime.now()}")
 
     if params["use_wandb"] == 1:
         wandb.log(
