@@ -5,10 +5,13 @@ build/
 dist/
 wheels/
 *.egg-info
-data/
-examples/wandb/
-examples/seedwandb/ 
-examples/saved_model/ 
+data/*
+.vscode/
+
+# models
+examples/wandb/*
+examples/saved_model/*  
+
 
 # Virtual environments
 .venv

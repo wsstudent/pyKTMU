@@ -24,7 +24,7 @@ dname2paths = {
     "ednet5w": "../data/ednet/",
     "peiyou": "../data/peiyou/grade3_students_b_200.csv"
 }
-configf = "../configs/data_config.json"
+config = "../configs/data_config.json"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -58,7 +58,7 @@ if __name__ == "__main__":
         dname, 
         writef, 
         args.dataset_name, 
-        configf, 
+        config, 
         args.min_seq_len,
         args.maxlen, 
         args.kfold,
@@ -68,5 +68,5 @@ if __name__ == "__main__":
     print("="*100)
 
     #for question level model
-    split_question(dname, writef, args.dataset_name, configf, args.min_seq_len,args.maxlen, args.kfold)
+    split_question(dname, writef, args.dataset_name, config, args.min_seq_len,args.maxlen, args.kfold)
 
