@@ -48,7 +48,8 @@ def main(params):
     """
     主训练函数。
     """
-    # 如果未指定，默认使用wandb进行实验跟踪
+    # 如果未指定，默认使用wandb进行实验跟踪,
+    # 如果启用wandb，则初始化
     if "use_wandb" not in params:
         params["use_wandb"] = 1
 
