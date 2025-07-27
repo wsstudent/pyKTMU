@@ -1,8 +1,8 @@
 import argparse
-from wandb_train import main
+from wandb_train import main, unlearning_arg_parser
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(parents=[unlearning_arg_parser])
     parser.add_argument("--dataset_name", type=str, default="assist2015")
     parser.add_argument("--model_name", type=str, default="sakt")
     parser.add_argument("--emb_type", type=str, default="qid")

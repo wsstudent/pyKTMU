@@ -1,8 +1,9 @@
 import argparse
+from wandb_train import unlearning_arg_parser
 from wandb_train4promptkt import main
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(parents=[unlearning_arg_parser])
     parser.add_argument("--dataset_name", type=str, default="pretrain")
     parser.add_argument("--not_select_dataset", type=str, default="all")
     parser.add_argument("--re_mapping", type=str, default="0")
