@@ -978,26 +978,13 @@ def main(
             f"问题窗口序列测试集交互数: {ins}, 选择数: {ss}, 问题数: {qs}, 知识点数: {cs}, 序列数: {seqnum}"
         )
 
-    # 10. 写入最终配置文件
-    print("=" * 20)
-    print("步骤 10: 写入配置文件...")
-    write_config(
-        dataset_name=dataset_name,
-        dkeyid2idx=dkeyid2idx,
-        effective_keys=effective_keys,
-        configf=configf,
-        dpath=dname,
-        k=kfold,
-        min_seq_len=min_seq_len,
-        maxlen=maxlen,
-        flag=flag,
-    )
+    
 
-    # 11. (可选) 生成机器遗忘数据集
+    # 10. (可选) 生成机器遗忘数据集
     print("=" * 20)
     if gen_forget_data:
         print("=" * 20)
-        print(f"步骤 11: 批量生成遗忘策略数据集，遗忘比例: {forget_ratio}")
+        print(f"步骤 10: 批量生成遗忘策略数据集，遗忘比例: {forget_ratio}")
 
         if ForgetStrategy is None:
             print("错误: ForgetStrategy 未导入，无法生成遗忘数据集。")
@@ -1024,6 +1011,10 @@ def main(
                     retain_df = forget_result["retain_df"]
                     forget_df = forget_result["forget_df"]
 
+                    # 复制保留集和遗忘集
+                    retrain_test_df = copy.deepcopy(retain_df)
+                    forget_test_df = copy.deepcopy(forget_df)
+
                     # 2. 为保留集和遗忘集分别生成序列
                     print("  正在为保留集生成序列...")
                     retain_seqs = generate_sequences(
@@ -1034,8 +1025,24 @@ def main(
                     forget_seqs = generate_sequences(
                         forget_df, effective_keys, min_seq_len, maxlen
                     )
+                    # 3. 为重训练集和遗忘集生成与测试集相同的序列
+                    
 
-                    # 3. 构建文件名并保存
+                    retrain_test_df["fold"] = [-1] * retrain_test_df.shape[0]  # 重训练集的fold默认为-1
+                    forget_test_df["fold"] = [-1] * forget_test_df.shape[0]  # 遗忘集的fold默认为-1
+                    retrain_test_df["cidxs"] = get_inter_qidx(retrain_test_df)  # 添加全局交互ID
+                    forget_test_df["cidxs"] = get_inter_qidx(forget_test_df)  # 添加全局交互ID
+
+                    print("正在为重训练测试集生成序列...")
+                    retrain_test_seqs = generate_sequences(
+                        retrain_test_df, list(effective_keys) + ["cidxs"], min_seq_len, maxlen
+                    )
+                    print(" 正在为遗忘测试集生成序列...")
+                    forget_test_seqs = generate_sequences(
+                        forget_test_df, list(effective_keys) + ["cidxs"], min_seq_len, maxlen
+                    )
+
+                    # 4. 构建文件名并保存
                     params_str = "_".join(
                         [f"{k}{v}" for k, v in sorted(strategy_params.items()) if v]
                     )
@@ -1044,21 +1051,46 @@ def main(
 
                     retain_filename = f"train_valid_sequences_retain_{strategy}_ratio{forget_ratio}{params_str}.csv"
                     forget_filename = f"train_valid_sequences_forget_{strategy}_ratio{forget_ratio}{params_str}.csv"
+                    retain_test_filename = f"test_sequences_retrain_{strategy}_ratio{forget_ratio}{params_str}.csv"
+                    forget_test_filename = f"test_sequences_forget_{strategy}_ratio{forget_ratio}{params_str}.csv"
+
 
                     retain_path = os.path.join(dname, retain_filename)
                     forget_path = os.path.join(dname, forget_filename)
 
+                    retain_test_path = os.path.join(dname, retain_test_filename)
+                    forget_test_path = os.path.join(dname, forget_test_filename)
+
                     retain_seqs.to_csv(retain_path, index=False)
                     forget_seqs.to_csv(forget_path, index=False)
+                    retrain_test_seqs.to_csv(retain_test_path, index=False)
+                    forget_test_seqs.to_csv(forget_test_path, index=False)
 
                     print(f"  已保存保留集: {retain_filename} ({len(retain_seqs)} 行)")
                     print(f"  已保存遗忘集: {forget_filename} ({len(forget_seqs)} 行)")
+                    print(f"  已保存重训练测试集: {retain_test_filename} ({len(retrain_test_seqs)} 行)")
+                    print(f"  已保存遗忘测试集: {forget_test_filename} ({len(forget_test_seqs)} 行)")
 
                 except Exception as e:
                     print(f"  处理策略 {strategy} 时出错: {e}")
                     continue
 
             print("\n所有遗忘策略处理完成！")
+
+    # 11. 写入最终配置文件
+    print("=" * 20)
+    print("步骤 10: 写入配置文件...")
+    write_config(
+        dataset_name=dataset_name,
+        dkeyid2idx=dkeyid2idx,
+        effective_keys=effective_keys,
+        configf=configf,
+        dpath=dname,
+        k=kfold,
+        min_seq_len=min_seq_len,
+        maxlen=maxlen,
+        flag=flag,
+    )
 
     print("=" * 20)
     print("统计信息汇总:")
