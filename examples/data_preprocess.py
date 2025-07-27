@@ -4,6 +4,10 @@ from pykt.preprocess.split_datasets import main as split_concept
 from pykt.preprocess.split_datasets_que import main as split_question
 from pykt.preprocess import data_proprocess, process_raw_data
 
+# 修改这一行，使用 split_concept.__module__ 来找到模块名，然后用 sys.modules 获取模块对象
+print(f"正在加载的 split_datasets 模块位于: {sys.modules[split_concept.__module__].__file__}")
+
+
 dname2paths = {
     "assist2009": "../data/assist2009/skill_builder_data_corrected_collapsed.csv",
     "assist2012": "../data/assist2012/2012-2013-data-with-predictions-4-final.csv",
@@ -20,7 +24,7 @@ dname2paths = {
     "ednet5w": "../data/ednet/",
     "peiyou": "../data/peiyou/grade3_students_b_200.csv"
 }
-configf = "../configs/data_config.json"
+config = "../configs/data_config.json"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -29,6 +33,9 @@ if __name__ == "__main__":
     parser.add_argument("-m","--min_seq_len", type=int, default=3)
     parser.add_argument("-l","--maxlen", type=int, default=200)
     parser.add_argument("-k","--kfold", type=int, default=5)
+    # 新增参数，用于触发遗忘数据集的生成
+    parser.add_argument("--gen_forget_data", action="store_true", help="If set, generate retain/forget sets for all strategies.")
+    parser.add_argument("--forget_ratio", type=float, default=0.2, help="Ratio of users to forget.")
     # parser.add_argument("--mode", type=str, default="concept",help="question or concept")
     args = parser.parse_args()
 
@@ -44,10 +51,22 @@ if __name__ == "__main__":
     # split
     os.system("rm " + dname + "/*.pkl")
 
-    #for concept level model
-    split_concept(dname, writef, args.dataset_name, configf, args.min_seq_len,args.maxlen, args.kfold)
+    # for concept level model
+    # split_concept(dname, writef, args.dataset_name, configf, args.min_seq_len,args.maxlen, args.kfold)
+    # 传递新参数
+    split_concept(
+        dname, 
+        writef, 
+        args.dataset_name, 
+        config, 
+        args.min_seq_len,
+        args.maxlen, 
+        args.kfold,
+        gen_forget_data=args.gen_forget_data,
+        forget_ratio=args.forget_ratio
+    )
     print("="*100)
 
     #for question level model
-    split_question(dname, writef, args.dataset_name, configf, args.min_seq_len,args.maxlen, args.kfold)
+    split_question(dname, writef, args.dataset_name, config, args.min_seq_len,args.maxlen, args.kfold)
 
