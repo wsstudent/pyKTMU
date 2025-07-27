@@ -1,8 +1,8 @@
 import argparse
-from wandb_train import main
+from wandb_train import main, unlearning_arg_parser
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(parents=[unlearning_arg_parser])
     #dataset config
     parser.add_argument("--dataset_name", type=str, default="assist2009")
     parser.add_argument("--fold", type=int, default=0)

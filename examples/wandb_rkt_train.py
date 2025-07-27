@@ -1,5 +1,5 @@
 import argparse
-from wandb_train import main
+from wandb_train import main, unlearning_arg_parser
 
 from wandb_train import unlearning_arg_parser
 

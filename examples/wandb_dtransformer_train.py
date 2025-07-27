@@ -1,5 +1,5 @@
 import argparse
-from wandb_train import main
+from wandb_train import main, unlearning_arg_parser
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -12,7 +12,7 @@ def str2bool(v):
         raise argparse.ArgumentTypeError('Boolean value expected.')
     
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(parents=[unlearning_arg_parser])
     parser.add_argument("--dataset_name", type=str, default="statics2011")
     parser.add_argument("--model_name", type=str, default="dtransformer")
     parser.add_argument("--emb_type", type=str, default="qid_cl")

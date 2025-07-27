@@ -1,5 +1,5 @@
 import argparse
-from wandb_train import main, unlearning_arg_parser
+from wandb_train import main, unlearning_arg_parser, unlearning_arg_parser
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(parents=[unlearning_arg_parser])
