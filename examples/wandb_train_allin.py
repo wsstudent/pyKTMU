@@ -10,7 +10,7 @@ from torch.optim import SGD, Adam
 from pykt.models import train_model, evaluate, init_model
 from pykt.utils import debug_print, set_seed
 from pykt.datasets import init_dataset4train
-from pykt.utils.Fisher import Fisher
+from pykt.utils.Unlearner import Unlearner
 
 # ————————————————————————————————
 # 共享参数定义 (提供给启动器脚本继承)
@@ -26,7 +26,7 @@ unlearning_arg_parser.add_argument(
     "--unlearn_strategy", type=str, default="random", help="[retrain专用] 数据划分策略"
 )
 unlearning_arg_parser.add_argument(
-    "--forget_ratio", type=float, default=0.1, help="[retrain专用] 遗忘数据比例"
+    "--forget_ratio", type=float, default=0.2, help="[retrain专用] 遗忘数据比例"
 )
 unlearning_arg_parser.add_argument(
     "--model_ckpt_path",
@@ -64,28 +64,19 @@ def save_config(train_config, model_config, data_config, params, save_dir):
         json.dump(d, fout, indent=4)
 
 
-def get_dataloader(dataset_name, model_name, data_config, fold, batch_size, data_type):
-    """根据数据类型（retain, forget, test）获取数据加载器"""
-    temp_config = copy.deepcopy(data_config)
-    if data_type in ["retain", "forget"]:
-        file_key = f"{data_type}_file"
-        if file_key not in temp_config[dataset_name]:
-            raise ValueError(
-                f"请在 data_config.json 的 '{dataset_name}' 中定义 '{file_key}'"
-            )
-        temp_config[dataset_name]["train_valid_file"] = temp_config[dataset_name][
-            file_key
-        ]
-        loader, _ = init_dataset4train(
-            dataset_name, model_name, temp_config, fold=0, batch_size=batch_size
-        )
-        return loader
-    elif data_type == "test":
-        _, _, loader = init_dataset4train(
-            dataset_name, model_name, temp_config, -1, batch_size
-        )
-        return loader
-    raise ValueError(f"不支持的数据类型: {data_type}")
+def replace_dataset(params, data_config, dataset_type):
+    """根据参数中的 dataset_name 替换数据配置中的数据集路径。"""
+    retrain_file_name = f"train_valid_sequences_{dataset_type}_{params['unlearn_strategy']}_ratio{params['forget_ratio']}.csv"
+    retrain_file_path = os.path.join(
+        data_config[params["dataset_name"]]["dpath"], retrain_file_name
+    )
+    if not os.path.exists(retrain_file_path):
+        raise FileNotFoundError(f"指定的重训练文件不存在: {retrain_file_path}")
+    data_config[params["dataset_name"]]["train_valid_file"] = retrain_file_name
+    print(
+        f"已将数据{data_config[params['dataset_name']]['train_valid_file']}的替换为: {retrain_file_name}"
+    )
+    return data_config
 
 
 # ————————————————————————————————
@@ -211,109 +202,13 @@ def run_standard_training(params, data_config, train_config):
 
 
 def run_unlearning_retrain(params, data_config, train_config):
-    print("✨ 执行任务：[遗忘方法 - 从头重训练]")
-    retrain_file_name = f"train_valid_sequences_retain_{params['unlearn_strategy']}_ratio{params['forget_ratio']}.csv"
-    retrain_file_path = os.path.join(
-        data_config[params["dataset_name"]]["dpath"], retrain_file_name
-    )
-    if not os.path.exists(retrain_file_path):
-        raise FileNotFoundError(f"指定的重训练文件不存在: {retrain_file_path}")
-    data_config[params["dataset_name"]]["train_valid_file"] = retrain_file_name
-    print(f"已切换训练数据至: {retrain_file_name}")
+    print("执行任务：[遗忘方法 - 从头重训练]")
+    data_config = replace_dataset(params, data_config, "retain")
     run_standard_training(params, data_config, train_config)
 
 
-def run_unlearning_fisher(params, data_config, train_config):
-    print("✨ 执行任务：[遗忘方法 - Fisher Information]")
-    model_name, dataset_name, fold, emb_type, save_dir = (
-        params["model_name"],
-        params["dataset_name"],
-        params["fold"],
-        params["emb_type"],
-        params["save_dir"],
-    )
-    if not params.get("model_ckpt_path"):
-        raise ValueError("使用Fisher遗忘方法时，必须提供 --model_ckpt_path 参数。")
-    print(f"加载预训练模型于: {params['model_ckpt_path']}")
-    with open(os.path.join(params["model_ckpt_path"], "config.json")) as f:
-        pretrain_config = json.load(f)
-        model_config = pretrain_config["model_config"]
-        original_train_config = pretrain_config["train_config"]
-    original_model = init_model(
-        model_name, model_config, data_config[dataset_name], emb_type
-    )
-    model_path = os.path.join(params["model_ckpt_path"], f"{emb_type}_model.ckpt")
-    original_model.load_state_dict(torch.load(model_path, map_location=device))
-    original_model.to(device)
-    original_model.eval()
-    batch_size = params.get("batch_size", 64)
-    retain_loader = get_dataloader(
-        dataset_name, model_name, data_config, fold, batch_size, "retain"
-    )
-    forget_loader = get_dataloader(
-        dataset_name, model_name, data_config, fold, batch_size, "forget"
-    )
-    test_loader = get_dataloader(
-        dataset_name, model_name, data_config, fold, batch_size, "test"
-    )
-    pre_test_auc, pre_test_acc = evaluate(original_model, test_loader, model_name)
-    print(f"【遗忘前】 => 测试集 AUC: {pre_test_auc:.4f}, ACC: {pre_test_acc:.4f}")
-    fisher_unlearner = Fisher(model_to_wrap=original_model, model_name=model_name)
-    fisher_unlearner.to(device)
 
-    class TempDataHandler:
-        def __init__(self, retain_loader, forget_loader):
-            self.loaders = {"retain": retain_loader, "forget": forget_loader}
 
-        def get_data_loader(self, split, shuffle=True):
-            return self.loaders.get(split)
-
-    fisher_unlearner.unlearn(
-        data_handler=TempDataHandler(retain_loader, forget_loader),
-        alpha=params.get("alpha", 10.0),
-        device=device,
-    )
-    unlearned_model = fisher_unlearner.model
-    post_test_auc, post_test_acc = evaluate(unlearned_model, test_loader, model_name)
-    post_forget_auc, post_forget_acc = evaluate(
-        unlearned_model, forget_loader, model_name
-    )
-    print(f"【遗忘后】 => 测试集 AUC: {post_test_auc:.4f}, ACC: {post_test_acc:.4f}")
-    print(
-        f"【遗忘后】 => 遗忘集 AUC: {post_forget_auc:.4f}, ACC: {post_forget_acc:.4f}"
-    )
-    params_str = f"fisher_{model_name}_{dataset_name}_alpha{params['alpha']}_seed{params['seed']}"
-    if params.get("add_uuid", 0) == 1:
-        params_str += f"_{str(uuid.uuid4())[:8]}"
-    ckpt_path = os.path.join(save_dir, params_str)
-    if not os.path.isdir(ckpt_path):
-        os.makedirs(ckpt_path)
-    print(f"遗忘后的模型和日志将保存至: {ckpt_path}")
-    model_save_path = os.path.join(ckpt_path, f"{emb_type}_model.ckpt")
-    torch.save(unlearned_model.state_dict(), model_save_path)
-    print(f"遗忘后的模型权重已保存至: {model_save_path}")
-    final_params_for_save = copy.deepcopy(pretrain_config["params"])
-    final_params_for_save.update(params)
-    final_params_for_save["original_model_path"] = params["model_ckpt_path"]
-    save_config(
-        original_train_config,
-        model_config,
-        data_config[dataset_name],
-        final_params_for_save,
-        ckpt_path,
-    )
-    print(f"遗忘后模型的配置文件 (config.json) 已保存。")
-    if params.get("use_wandb", 0) == 1:
-        import wandb
-
-        wandb.log(
-            {
-                "pre_test_auc": pre_test_auc,
-                "post_test_auc": post_test_auc,
-                "post_forget_auc": post_forget_auc,
-                "model_save_path": ckpt_path,
-            }
-        )
 
 
 # ————————————————————————————————
