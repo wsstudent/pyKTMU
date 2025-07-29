@@ -65,15 +65,15 @@ def save_config(train_config, model_config, data_config, params, save_dir):
 
 def replace_dataset(params, data_config, dataset_type):
     """根据参数中的 dataset_name 替换数据配置中的数据集路径。"""
-    retrain_file_name = f"train_valid_sequences_{dataset_type}_{params['unlearn_strategy']}_ratio{params['forget_ratio']}.csv"
-    retrain_file_path = os.path.join(
-        data_config[params["dataset_name"]]["dpath"], retrain_file_name
+    retain_file_name = f"train_valid_sequences_{dataset_type}_{params['unlearn_strategy']}_ratio{params['forget_ratio']}.csv"
+    retain_file_patr = os.path.join(
+        data_config[params["dataset_name"]]["dpath"], retain_file_name
     )
-    if not os.path.exists(retrain_file_path):
-        raise FileNotFoundError(f"指定的重训练文件不存在: {retrain_file_path}")
-    data_config[params["dataset_name"]]["train_valid_file"] = retrain_file_name
+    if not os.path.exists(retain_file_patr):
+        raise FileNotFoundError(f"指定的保留集文件不存在: {retain_file_patr}")
+    data_config[params["dataset_name"]]["train_valid_file"] = retain_file_name
     print(
-        f"已将数据{data_config[params['dataset_name']]['train_valid_file']}的替换为: {retrain_file_name}"
+        f"已将数据{data_config[params['dataset_name']]['train_valid_file']}的替换为: {retain_file_name}"
     )
     return data_config
 

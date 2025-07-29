@@ -88,13 +88,15 @@ python data_preprocess.py \
 
 ### 2. 模型训练与机器遗忘
 
-`examples/wandb_train.py` 是中央控制器，支持标准训练与遗忘任务。
+`examples/wandb_xxx_train.py` 是中央控制器，支持标准训练与遗忘任务。
+下面的示例展示了dkt如何使用不同的遗忘方法进行模型训练与遗忘。
+当训练其他模型时，使用相应的训练文件：`wandb_xxx_train.py`
+
 
 #### A. 标准训练
 
 ```bash
-python wandb_train.py \
-    --model_name dkt \
+python wandb_dkt_train.py \
     --dataset_name assist2009 \
     --save_dir saved_model \
     --seed 42 \
@@ -105,9 +107,6 @@ python wandb_train.py \
 #### B. 机器遗忘
 
 通过 `--unlearn_method` 选择遗忘策略：
-下面的示例展示了dkt如何使用不同的遗忘方法进行模型训练与遗忘。
-当训练其他模型时，使用相应的训练文件：`wandb_xxx_train.py`
-
 ```bash
 ##### 示例 1：Retrain（重训练）
 
