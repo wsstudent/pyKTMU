@@ -56,12 +56,12 @@ def read_data(fname, min_seq_len=3, response_set=[0, 1]):
     dres = dict()  # 用于构建DataFrame的字典
     delstu, delnum, badr = 0, 0, 0  # 统计被删除的学生数、交互数和含无效作答的记录数
     goodnum = 0  # 统计有效的总交互数
-    
+
     with open(fname, "r", encoding="utf8") as fin:
         i = 0
         lines = fin.readlines()
         dcur = dict()  # 临时存储当前学生的数据
-        
+
         while i < len(lines):
             line = lines[i].strip()
             # 每6行一个学生数据块
@@ -142,7 +142,7 @@ def read_data(fname, min_seq_len=3, response_set=[0, 1]):
                         dres[key].append(dcur[key])
                 dcur = dict()  # 重置临时字典
             i += 1
-            
+
     df = pd.DataFrame(dres)
     # 打印数据读取和清洗的统计信息
     print(
@@ -391,7 +391,7 @@ def generate_sequences(df, effective_keys, min_seq_len=3, maxlen=200, pad_val=-1
     save_keys = list(effective_keys) + ["selectmasks"]
     dres = {"selectmasks": []}
     dropnum = 0  # 统计被丢弃的交互数
-    
+
     for i, row in df.iterrows():
         dcur = save_dcur(row, effective_keys)
 
@@ -455,11 +455,11 @@ def generate_window_sequences(df, effective_keys, maxlen=200, pad_val=-1):
     """
     save_keys = list(effective_keys) + ["selectmasks"]
     dres = {"selectmasks": []}
-    
+
     for i, row in df.iterrows():
         dcur = save_dcur(row, effective_keys)
         lenrs = len(dcur["responses"])
-        
+
         if lenrs > maxlen:
             # 先处理第一个完整的窗口
             for key in effective_keys:
@@ -513,7 +513,7 @@ def get_inter_qidx(df):
     qidx_ids = []
     bias = 0  # 交互ID的偏移量
     inter_num = 0
-    
+
     for _, row in df.iterrows():
         # 生成当前学生序列的交互ID
         ids_list = [str(x + bias) for x in range(len(row["responses"].split(",")))]
@@ -521,7 +521,7 @@ def get_inter_qidx(df):
         ids = ",".join(ids_list)
         qidx_ids.append(ids)
         bias += len(ids_list)  # 更新偏移量
-    
+
     # 断言检查，确保最后一个ID等于总交互数-1
     if ids_list:  # 确保列表不为空
         assert inter_num - 1 == int(ids_list[-1])
@@ -555,7 +555,7 @@ def expand_question(dcur, global_qidx, pad_val=-1):
     last = -1
     # 添加问题ID和剩余次数
     dcur["qidxs"], dcur["rest"], global_qidx = add_qidx(dcur, global_qidx)
-    
+
     for i in range(len(repeats)):
         # 如果是原始问题，记录下到此为止的历史
         if str(repeats[i]) == "0":
@@ -609,7 +609,7 @@ def generate_question_sequences(
     dres = {}
     global_qidx = -1
     df["index"] = list(range(0, df.shape[0]))  # 记录原始行号
-    
+
     for i, row in df.iterrows():
         dcur = save_dcur(row, effective_keys)
         dcur["orirow"] = [row["index"]] * len(dcur["responses"])
@@ -617,7 +617,7 @@ def generate_question_sequences(
         # 展开为问题序列
         dexpand, global_qidx = expand_question(dcur, global_qidx)
         seq_num = len(dexpand["responses"])
-        
+
         for j in range(seq_num):
             curlen = len(dexpand["responses"][j])
             if curlen < 2:  # 不预测第一个题
@@ -639,25 +639,36 @@ def generate_question_sequences(
                 # 长度超过maxlen的处理逻辑
                 if window:  # 使用滑动窗口
                     # 处理第一个完整窗口
-                    if dexpand["selectmasks"][j][maxlen-1] == 1:
+                    if dexpand["selectmasks"][j][maxlen - 1] == 1:
                         for key in dexpand:
                             dres.setdefault(key, [])
-                            dres[key].append(",".join([str(k) for k in dexpand[key][j][0:maxlen]]))
+                            dres[key].append(
+                                ",".join([str(k) for k in dexpand[key][j][0:maxlen]])
+                            )
                         for key in ONE_KEYS:
                             dres.setdefault(key, [])
                             dres[key].append(dcur[key])
 
                     # 滑动窗口处理剩余部分
-                    for n in range(maxlen+1, curlen+1):
-                        if dexpand["selectmasks"][j][n-1] == 1:
+                    for n in range(maxlen + 1, curlen + 1):
+                        if dexpand["selectmasks"][j][n - 1] == 1:
                             for key in dexpand:
                                 dres.setdefault(key, [])
                                 if key == "selectmasks":
                                     # 窗口模式：只有最后位置为1
-                                    dres[key].append(",".join([str(pad_val)] * (maxlen - 1) + ["1"]))
+                                    dres[key].append(
+                                        ",".join([str(pad_val)] * (maxlen - 1) + ["1"])
+                                    )
                                 else:
                                     # 提取窗口 [n-maxlen : n]
-                                    dres[key].append(",".join([str(k) for k in dexpand[key][j][n-maxlen: n]]))
+                                    dres[key].append(
+                                        ",".join(
+                                            [
+                                                str(k)
+                                                for k in dexpand[key][j][n - maxlen : n]
+                                            ]
+                                        )
+                                    )
                             for key in ONE_KEYS:
                                 dres.setdefault(key, [])
                                 dres[key].append(dcur[key])
@@ -669,12 +680,19 @@ def generate_question_sequences(
                         if dexpand["selectmasks"][j][k + maxlen - 1] == 1:
                             for key in dexpand:
                                 dres.setdefault(key, [])
-                                dres[key].append(",".join([str(s) for s in dexpand[key][j][k: k + maxlen]]))
+                                dres[key].append(
+                                    ",".join(
+                                        [
+                                            str(s)
+                                            for s in dexpand[key][j][k : k + maxlen]
+                                        ]
+                                    )
+                                )
                             for key in ONE_KEYS:
                                 dres.setdefault(key, [])
                                 dres[key].append(dcur[key])
                         k += maxlen
-                    
+
                     # 处理剩余部分
                     if rest >= min_seq_len:  # 只有当剩余长度>=min_seq_len时才保留
                         # 自动跳过短序列
@@ -682,7 +700,8 @@ def generate_question_sequences(
                         for key in dexpand:
                             dres.setdefault(key, [])
                             paded_info = np.concatenate(
-                                [dexpand[key][j][k:], np.array([pad_val] * pad_dim)])
+                                [dexpand[key][j][k:], np.array([pad_val] * pad_dim)]
+                            )
                             dres[key].append(",".join([str(s) for s in paded_info]))
                         for key in ONE_KEYS:
                             dres.setdefault(key, [])
@@ -727,7 +746,7 @@ def write_config(
     if "concepts" in effective_keys:
         input_type.append("concepts")
         num_c = len(dkeyid2idx.get("concepts", {}))
-    
+
     folds = list(range(0, k))
     dconfig = {
         "dpath": dpath,
@@ -746,7 +765,7 @@ def write_config(
         "test_window_file": "test_window_sequences.csv",
     }
     dconfig.update(other_config)
-    
+
     if flag:  # 如果生成了问题序列文件，也加入配置
         dconfig["test_question_file"] = "test_question_sequences.csv"
         dconfig["test_question_window_file"] = "test_question_window_sequences.csv"
@@ -777,32 +796,32 @@ def calStatistics(df, stares, key):
     """计算DataFrame的统计信息。"""
     allin, allselect = 0, 0  # 总交互数，总选择数
     allqs, allcs = set(), set()  # 总问题数，总知识点数
-    
+
     for i, row in df.iterrows():
         if not isinstance(row["responses"], str):
             continue
-            
+
         rs = row["responses"].split(",")
         # 减去填充的部分
         curlen = len(rs) - rs.count("-1")
         allin += curlen
-        
+
         if "selectmasks" in row and isinstance(row["selectmasks"], str):
             ss = row["selectmasks"].split(",")
             slen = ss.count("1")
             allselect += slen
-            
+
         if "concepts" in row and isinstance(row["concepts"], str):
             cs = row["concepts"].split(",")
             fc = [c for c_list in [c.split("_") for c in cs] for c in c_list]
             curcs = set(fc) - {"-1"}
             allcs |= curcs
-            
+
         if "questions" in row and isinstance(row["questions"], str):
             qs = row["questions"].split(",")
             curqs = set(qs) - {"-1"}
             allqs |= curqs
-            
+
     stares.append(",".join([str(s) for s in [key, allin, df.shape[0], allselect]]))
     return allin, allselect, len(allqs), len(allcs), df.shape[0]
 
@@ -855,7 +874,7 @@ def main(
     # 1. 读取数据
     print("步骤 1: 读取原始数据...")
     total_df, effective_keys = read_data(fname, min_seq_len, response_set=[0, 1])
-    
+
     if "concepts" in effective_keys:
         max_concepts = get_max_concepts(total_df)
     else:
@@ -978,8 +997,6 @@ def main(
             f"问题窗口序列测试集交互数: {ins}, 选择数: {ss}, 问题数: {qs}, 知识点数: {cs}, 序列数: {seqnum}"
         )
 
-    
-
     # 10. (可选) 生成机器遗忘数据集
     print("=" * 20)
     if gen_forget_data:
@@ -1012,7 +1029,7 @@ def main(
                     forget_df = forget_result["forget_df"]
 
                     # 复制保留集和遗忘集
-                    retrain_test_df = copy.deepcopy(retain_df)
+                    retain_test_df = copy.deepcopy(retain_df)
                     forget_test_df = copy.deepcopy(forget_df)
 
                     # 2. 为保留集和遗忘集分别生成序列
@@ -1026,20 +1043,33 @@ def main(
                         forget_df, effective_keys, min_seq_len, maxlen
                     )
                     # 3. 为重训练集和遗忘集生成与测试集相同的序列
-                    
 
-                    retrain_test_df["fold"] = [-1] * retrain_test_df.shape[0]  # 重训练集的fold默认为-1
-                    forget_test_df["fold"] = [-1] * forget_test_df.shape[0]  # 遗忘集的fold默认为-1
-                    retrain_test_df["cidxs"] = get_inter_qidx(retrain_test_df)  # 添加全局交互ID
-                    forget_test_df["cidxs"] = get_inter_qidx(forget_test_df)  # 添加全局交互ID
+                    retain_test_df["fold"] = [-1] * retain_test_df.shape[
+                        0
+                    ]  # 重训练集的fold默认为-1
+                    forget_test_df["fold"] = [-1] * forget_test_df.shape[
+                        0
+                    ]  # 遗忘集的fold默认为-1
+                    retain_test_df["cidxs"] = get_inter_qidx(
+                        retain_test_df
+                    )  # 添加全局交互ID
+                    forget_test_df["cidxs"] = get_inter_qidx(
+                        forget_test_df
+                    )  # 添加全局交互ID
 
                     print("正在为重训练测试集生成序列...")
-                    retrain_test_seqs = generate_sequences(
-                        retrain_test_df, list(effective_keys) + ["cidxs"], min_seq_len, maxlen
+                    retain_test_seqs = generate_sequences(
+                        retain_test_df,
+                        list(effective_keys) + ["cidxs"],
+                        min_seq_len,
+                        maxlen,
                     )
                     print(" 正在为遗忘测试集生成序列...")
                     forget_test_seqs = generate_sequences(
-                        forget_test_df, list(effective_keys) + ["cidxs"], min_seq_len, maxlen
+                        forget_test_df,
+                        list(effective_keys) + ["cidxs"],
+                        min_seq_len,
+                        maxlen,
                     )
 
                     # 4. 构建文件名并保存
@@ -1051,9 +1081,8 @@ def main(
 
                     retain_filename = f"train_valid_sequences_retain_{strategy}_ratio{forget_ratio}{params_str}.csv"
                     forget_filename = f"train_valid_sequences_forget_{strategy}_ratio{forget_ratio}{params_str}.csv"
-                    retain_test_filename = f"test_sequences_retrain_{strategy}_ratio{forget_ratio}{params_str}.csv"
+                    retain_test_filename = f"test_sequences_retain_{strategy}_ratio{forget_ratio}{params_str}.csv"
                     forget_test_filename = f"test_sequences_forget_{strategy}_ratio{forget_ratio}{params_str}.csv"
-
 
                     retain_path = os.path.join(dname, retain_filename)
                     forget_path = os.path.join(dname, forget_filename)
@@ -1063,13 +1092,17 @@ def main(
 
                     retain_seqs.to_csv(retain_path, index=False)
                     forget_seqs.to_csv(forget_path, index=False)
-                    retrain_test_seqs.to_csv(retain_test_path, index=False)
+                    retain_test_seqs.to_csv(retain_test_path, index=False)
                     forget_test_seqs.to_csv(forget_test_path, index=False)
 
                     print(f"  已保存保留集: {retain_filename} ({len(retain_seqs)} 行)")
                     print(f"  已保存遗忘集: {forget_filename} ({len(forget_seqs)} 行)")
-                    print(f"  已保存重训练测试集: {retain_test_filename} ({len(retrain_test_seqs)} 行)")
-                    print(f"  已保存遗忘测试集: {forget_test_filename} ({len(forget_test_seqs)} 行)")
+                    print(
+                        f"  已保存重训练测试集: {retain_test_filename} ({len(retain_test_seqs)} 行)"
+                    )
+                    print(
+                        f"  已保存遗忘测试集: {forget_test_filename} ({len(forget_test_seqs)} 行)"
+                    )
 
                 except Exception as e:
                     print(f"  处理策略 {strategy} 时出错: {e}")
@@ -1097,4 +1130,3 @@ def main(
     print("\n".join(stares))
     print("数据预处理完成！")
     print("=" * 20)
-
