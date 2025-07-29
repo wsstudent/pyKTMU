@@ -57,14 +57,14 @@ uv pip install -e .
 > ### 请先到exapmles文件夹下再执行以下指令
 
 ``` bash
-cd exmples
+cd examples
 ```
 
 ### 1. 数据预处理
-使用 `exmples\data_preprocess.py`处理原始数据，一键生成用于机器遗忘实验的保留集和遗忘集。
+使用 `examples\data_preprocess.py`处理原始数据，一键生成用于机器遗忘实验的保留集和遗忘集。
 
 ```bash
-python data_preprocess \
+python data_preprocess.py \
     --dataset_name assist2009 \
     --gen_forget_data \
     --forget_ratio 0.2 \
@@ -73,7 +73,7 @@ python data_preprocess \
 #### 参数说明：
 
 * `--dataset_name`: 处理的数据集名称（如 `assist2009`）
-* `--gen_forget_data`: 是否生成遗忘数据集，有这个参数即为True
+* `--gen_forget_data`: 是否生成遗忘数据集，有这个参数表示生成遗忘集和保留集
 * `--forget_ratio`: 遗忘比例（如 `0.2` 表示划出 20% 的数据）
 
 生成的文件包括：
@@ -82,6 +82,7 @@ python data_preprocess \
 * `train_valid_sequences_forget_{strategy}_ratio{ratio}.csv`
 * `test_sequences_retrain_{strategy}_ratio{ratio}.csv`
 * `test_sequences_forget_{strategy}_ratio{ratio}.csv`
+其中遗忘策略有5种：`random`, `sequential`, `random_sequential`, `sequential_random`, `sequential_sequential`。
 
 ---
 
@@ -104,12 +105,14 @@ python wandb_train.py \
 #### B. 机器遗忘
 
 通过 `--unlearn_method` 选择遗忘策略：
+下面的示例展示了dkt如何使用不同的遗忘方法进行模型训练与遗忘。
+当训练其他模型时，使用相应的训练文件：`wandb_xxx_train.py`
 
+```bash
 ##### 示例 1：Retrain（重训练）
 
 ```bash
-python wandb_train.py \
-    --model_name dkt \
+python wandb_dkt_train.py \
     --dataset_name assist2009 \
     --unlearn_method retrain \
     --unlearn_strategy random \
@@ -121,8 +124,7 @@ python wandb_train.py \
 ##### 示例 2：Surgical / Ascent / Finetune
 
 ```bash
-python wandb_train.py \
-    --model_name dkt \
+python wandb_dkt_train.py \
     --dataset_name assist2009 \
     --unlearn_method surgical \
     --model_ckpt_path saved_model/dkt_assist2009_seed42_fold0 \
@@ -139,7 +141,7 @@ python wandb_train.py \
 * `--model_ckpt_path`: 预训练模型路径（finetune/surgical/ascent 等遗忘方法必须带上此参数）
 * `--alpha`: 遗忘强度（用于 surgical/ascent）
 * `--finetune_epochs`, `--finetune_lr`: 微调轮数与学习率
-* `--unlearn_strategy`, `--forget_ratio`: 必须与预处理步骤一致
+* `--unlearn_strategy`, `--forget_ratio`: 选择对应的数据
 
 ---
 
@@ -162,7 +164,6 @@ python wandb_predict.py \
 * `--unlearn_strategy`: 数据划分策略（如 `random`）
 * `--forget_ratio`: 遗忘比例
 * `--unlearn_test_file`: `forget` 表示遗忘集，`retain` 表示保留集，留空则评估原始测试集
-* `--debug`: 若设为 `True`，激活调试器 `pdb`
 
 ---
 
