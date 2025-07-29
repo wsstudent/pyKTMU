@@ -326,7 +326,7 @@ def run_unlearning_task(params, data_config):
 # ————————————————————————————————
 def main(params):
     """
-    【最终完整版】程序主入口和任务分发器
+    程序主入口和任务分发器
     """
     # --- Wandb 初始化 ---
     if params.get("use_wandb", 1) == 1:
@@ -346,15 +346,26 @@ def main(params):
         data_config = json.load(fin)
 
     # --- 合并与更新参数 ---
-    # 优先级: 命令行参数 > 模型专属配置 > 通用训练配置
+    # 优先级顺序: 命令行 > 模型专属 > unlearning配置 > 通用训练配置
     model_name = params["model_name"]
-    final_params = config_from_json.get("train_config", {}).copy()  # 1. 基础配置
-    model_specific_config = config_from_json.get(model_name, {})
-    final_params.update(model_specific_config)  # 2. 模型专属配置覆盖
-    explicit_params = {k: v for k, v in params.items() if v is not None}
-    final_params.update(explicit_params)  # 3. 命令行参数最高优先级覆盖
-    params = final_params
 
+    # 1. 从通用训练配置开始
+    final_params = config_from_json.get("train_config", {}).copy()
+
+    # 2. 加载并合并 unlearning 的默认配置 (这是之前缺失的关键步骤)
+    unlearn_defaults = config_from_json.get("unlearning", {})
+    final_params.update(unlearn_defaults)
+
+    # 3. 合并模型专属配置
+    model_specific_config = config_from_json.get(model_name, {})
+    final_params.update(model_specific_config)
+
+    # 4. 最后，用命令行传入的非None参数覆盖，这是最高优先级
+    explicit_params = {k: v for k, v in params.items() if v is not None}
+    final_params.update(explicit_params)
+
+    # 5. 将最终合并好的参数赋给 params 变量，供后续所有流程统一使用
+    params = final_params
     print(f"最终生效的参数配置: {json.dumps(params, indent=4)}")
 
     # 准备 train_config, 主要用于 retrain 任务

@@ -86,9 +86,18 @@ class Unlearner:
         print("梯度上升式遗忘完成。")
 
     def _execute_finetune(self, retain_loader, device, **kwargs):
-        epochs = kwargs.get("finetune_epochs", 3)
-        lr = kwargs.get("finetune_lr", 1e-4)
-        layers_to_finetune = kwargs.get("finetune_layers", ["out", "output"])
+        # 从 kwargs 获取参数，如果值为 None，则使用默认值
+        epochs = kwargs.get("finetune_epochs")
+        if epochs is None:
+            epochs = 3
+
+        lr = kwargs.get("finetune_lr")
+        if lr is None:
+            lr = 1e-4
+
+        layers_to_finetune = kwargs.get("finetune_layers")
+        if layers_to_finetune is None:
+            layers_to_finetune = ["out", "output"]
         print(f"开始部分微调，共 {epochs} 轮，学习率为 {lr}。")
         print(f"将解冻包含以下关键字的层: {layers_to_finetune}")
         self._set_trainable_layers(layers_to_finetune)
@@ -165,4 +174,3 @@ class Unlearner:
                 total_loss += loss.item()
             avg_loss = total_loss / len(loader)
             print(f"微调 Epoch {epoch + 1}/{epochs}, 平均损失: {avg_loss:.4f}")
-
