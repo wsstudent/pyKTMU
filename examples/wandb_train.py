@@ -353,8 +353,18 @@ def main(params):
     final_params = config_from_json.get("train_config", {}).copy()
 
     # 2. 加载并合并 unlearning 的默认配置 (这是之前缺失的关键步骤)
-    unlearn_defaults = config_from_json.get("unlearning", {})
-    final_params.update(unlearn_defaults)
+    if params.get("unlearn_method") == "finetune":
+        if params.get("finetune_epochs") is None:
+            params["finetune_epochs"] = 3
+            print("Info: 'finetune_epochs' 未提供, 已在代码中设置为默认值 3")
+        if params.get("finetune_lr") is None:
+            params["finetune_lr"] = 1e-4
+            print("Info: 'finetune_lr' 未提供, 已在代码中设置为默认值 1e-4")
+        if params.get("finetune_layers") is None:
+            params["finetune_layers"] = ["out", "output"]
+            print(
+                "Info: 'finetune_layers' 未提供, 已在代码中设置为默认值 ['out', 'output']"
+            )
 
     # 3. 合并模型专属配置
     model_specific_config = config_from_json.get(model_name, {})

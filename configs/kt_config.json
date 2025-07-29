@@ -1,9 +1,4 @@
 {
-    "unlearning": {
-        "finetune_epochs": 3,
-        "finetune_lr": 1e-4,
-        "finetune_layers": ["out", "output"]
-    },
     "train_config": {
         "batch_size": 256,
         "num_epochs": 200,

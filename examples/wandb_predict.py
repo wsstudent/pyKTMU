@@ -152,6 +152,37 @@ def run_question_evaluation(model, loader, model_name, fusion_types, save_path):
     return evaluate_question(model, loader, model_name, fusion_types, save_path)
 
 
+def save_results_to_csv(result_data, csv_path):
+    """将单次评估结果增量保存到指定的CSV文件。
+
+    Args:
+        result_data (dict): 包含单行结果的字典。
+        csv_path (str): 目标CSV文件的路径。
+    """
+    # 检查文件是否存在，以决定是否需要写入表头
+    file_exists = os.path.exists(csv_path)
+
+    # 将字典转换为pandas DataFrame
+    df = pd.DataFrame([result_data])
+
+    print(f"正在将结果保存至: {csv_path}...")
+    try:
+        if not file_exists:
+            # 如果文件不存在，创建新文件并写入表头
+            df.to_csv(
+                csv_path, mode="w", header=True, index=False, encoding="utf-8-sig"
+            )
+            print("CSV文件已创建，并写入表头。")
+        else:
+            # 如果文件已存在，以追加模式写入，不包含表头
+            df.to_csv(
+                csv_path, mode="a", header=False, index=False, encoding="utf-8-sig"
+            )
+            print("结果已成功追加到现有CSV文件。")
+    except Exception as e:
+        print(f"保存到CSV时发生错误: {e}")
+
+
 def main(params):
     """
     主执行函数。
@@ -238,6 +269,26 @@ def main(params):
     dres["testauc"], dres["testacc"] = run_evaluation(
         model, test_loader, model_name, save_test_path, rel
     )
+
+    # 定义要保存的CSV文件名，可以根据需要修改
+    results_csv_path = "../data/evaluation_results.csv"
+
+    # 准备要保存到CSV的数据行
+    # 注意：这里的键名将作为CSV文件的列名
+    csv_row_data = {
+        "模型": trained_params.get("model_name", "N/A"),
+        "数据集": trained_params.get("dataset_name", "N/A"),
+        "遗忘策略": params.get("unlearn_strategy", "none"),
+        "遗忘比例": params.get("forget_ratio", 0.0),
+        "测试集类型": params.get(
+            "unlearn_test_file", "original"
+        ),  # 例如 'forget', 'retain', 或 'original'
+        "auc": dres["testauc"],
+        "acc": dres["testacc"],
+    }
+
+    # 调用函数保存数据
+    save_results_to_csv(csv_row_data, results_csv_path)
 
     # 6.2 滑动窗口测试集评估
     save_test_window_path = os.path.join(
@@ -328,7 +379,7 @@ if __name__ == "__main__":
         "--forget_ratio",
         type=float,
         default=0.2,
-        help="遗忘数据比例 (e.g., 0.2 for 20%)",
+        help="遗忘数据比例 (e.g., 0.2 for 20%%)",
     )
     parser.add_argument(
         "--unlearn_test_file",
