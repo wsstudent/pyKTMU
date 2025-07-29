@@ -83,7 +83,7 @@ def load_configs(params):
         ratio = params["forget_ratio"]
         # 构建新的测试文件名
         new_test_file = f"test_sequences_{test_file}_{strategy}_ratio{ratio}.csv"
-        print(f"Unlearning active: Using test file '{new_test_file}'")
+        print(f"已加载对应的{params['unlearn_test_file']}数据集, '{new_test_file}'")
         data_config["test_file"] = new_test_file
 
     return model_config, data_config, trained_params
