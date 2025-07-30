@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from pykt.models.train_model import model_forward
+from pykt.utils.utils import prepare_model_optimizer
 
 
 class Unlearner:
@@ -13,7 +14,7 @@ class Unlearner:
     所有方法都基于通用的 `model_forward` 函数，以实现对多种模型的广泛兼容。
     """
 
-    def __init__(self, model, model_name):
+    def __init__(self, model, model_name, params, optimizer_type="adam"):
         """
         初始化 Unlearner。
         Args:
@@ -24,6 +25,8 @@ class Unlearner:
             model.model_name = model_name
         self.model = model
         self.fisher_dict = {}
+        self.params = params
+        self.optimizer_type = optimizer_type
 
     def unlearn(
         self,
@@ -88,13 +91,7 @@ class Unlearner:
     def _execute_finetune(self, retain_loader, device, **kwargs):
         # 从 kwargs 获取参数，如果值为 None，则使用默认值
         epochs = kwargs.get("finetune_epochs")
-        if epochs is None:
-            epochs = 3
-
         lr = kwargs.get("finetune_lr")
-        if lr is None:
-            lr = 1e-4
-
         layers_to_finetune = kwargs.get("finetune_layers")
         if layers_to_finetune is None:
             layers_to_finetune = ["out", "output"]
@@ -162,7 +159,13 @@ class Unlearner:
 
     def _perform_finetune_loop(self, loader, epochs, lr, device):
         trainable_params = filter(lambda p: p.requires_grad, self.model.parameters())
-        optimizer = optim.AdamW(trainable_params, lr=lr)
+        optimizer = prepare_model_optimizer(
+            params=self.params,
+            model_name=self.model.model_name,
+            optimizer_type=self.optimizer_type,
+            parameters=trainable_params,  # 关键：只为可训练的参数创建优化器！
+            learning_rate=lr,  # 使用微调专用的学习率
+        )
         self.model.train()
         for epoch in range(epochs):
             total_loss = 0
