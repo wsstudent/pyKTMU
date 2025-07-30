@@ -10,6 +10,12 @@ from pykt.models import train_model, init_model
 from pykt.utils import set_seed
 from pykt.datasets import init_dataset4train
 from pykt.utils.Unlearner import Unlearner
+from pykt.utils.utils import (
+    prepare_model_config,
+    prepare_model_optimizer,
+    save_config,
+    replace_dataset,
+)
 
 # ————————————————————————————————
 # 共享参数定义 (提供给启动器脚本继承)
@@ -37,7 +43,10 @@ unlearning_arg_parser.add_argument(
     "--alpha", type=float, default=10.0, help="[fisher专用] 遗忘强度超参数"
 )
 unlearning_arg_parser.add_argument(
-    "--batch_size", type=int, default=None, help="训练时的 batch size, 会覆盖配置文件中的值"
+    "--batch_size",
+    type=int,
+    default=None,
+    help="训练时的 batch size, 会覆盖配置文件中的值",
 )
 
 
@@ -51,82 +60,9 @@ torch.set_num_threads(4)
 
 
 # ————————————————————————————————
-# 辅助函数区域
-# ————————————————————————————————
-def prepare_model_config(params, data_config, model_name, dataset_name):
-    """
-    根据传入的参数，准备并返回一个干净的、仅包含模型构造所需参数的字典。
-    这是从主训练流程中分离出来的关键函数。
-    """
-    # 1. 复制所有参数作为基础
-    model_config = copy.deepcopy(params)
-
-    # 2. 定义需要 seq_len 参数的模型白名单 (官方逻辑)
-    models_that_need_seq_len = ["saint", "saint++", "sakt", "atdkt", "simplekt", "stablekt", "bakt_time", "folibikt"]
-
-    # 3.定义一个需要从 model_config 中移除的参数黑名单
-    # 这个列表包含所有与模型构造无关的训练参数、标识符等
-    keys_to_remove = [
-        "model_name", "dataset_name", "emb_type", "save_dir", "fold", "seed",
-        "use_wandb", "add_uuid", "config_path", "unlearn_method", "model_ckpt_path",
-        "alpha", "unlearn_strategy", "forget_ratio", "num_epochs", "batch_size",
-        "optimizer", "learning_rate", "l2", "seq_len" # 即使不在白名单中，也确保从最终配置中移除
-    ]
-    for key in keys_to_remove:
-        if key in model_config:
-            del model_config[key]
-    
-    # 4. 按需添加 seq_len
-    if model_name in models_that_need_seq_len:
-        # 优先使用数据集配置中的maxlen
-        if 'maxlen' in data_config[dataset_name]:
-            seq_len_value = data_config[dataset_name]['maxlen']
-        else:
-            seq_len_value = params['seq_len']
-        model_config['seq_len'] = seq_len_value
-
-    # 5. 针对特定模型的额外清理 (官方逻辑)
-    if model_name == "dimkt":
-        if 'weight_decay' in model_config:
-            # weight_decay是优化器参数，不应传给模型构造函数
-            del model_config['weight_decay']
-
-    return model_config
-
-
-def save_config(train_config, model_config, data_config, params, save_dir):
-    """将训练配置、模型配置、数据配置和超参数保存到指定目录的json文件中。"""
-    d = {
-        "train_config": train_config,
-        "model_config": model_config,
-        "data_config": data_config,
-        "params": params,
-    }
-    save_path = os.path.join(save_dir, "config.json")
-    with open(save_path, "w") as fout:
-        json.dump(d, fout, indent=4)
-
-
-def replace_dataset(params, data_config, dataset_type):
-    """根据参数中的 dataset_name 替换数据配置中的数据集路径。"""
-    retain_file_name = f"train_valid_sequences_{dataset_type}_{params['unlearn_strategy']}_ratio{params['forget_ratio']}.csv"
-    retain_file_path = os.path.join(
-        data_config[params["dataset_name"]]["dpath"], retain_file_name
-    )
-    if not os.path.exists(retain_file_path):
-        raise FileNotFoundError(f"指定的保留集文件不存在: {retain_file_path}")
-    # 创建一个深拷贝以避免修改原始的data_config
-    temp_data_config = copy.deepcopy(data_config)
-    temp_data_config[params["dataset_name"]]["train_valid_file"] = retain_file_name
-    print(
-        f"已将数据集临时替换为: {retain_file_name}"
-    )
-    return temp_data_config
-
-
-# ————————————————————————————————
 # 任务执行函数区域
 # ————————————————————————————————
+
 
 def run_training(params, data_config, train_config):
     # --- 1. 提取核心参数 ---
@@ -145,7 +81,7 @@ def run_training(params, data_config, train_config):
     # --- 2. 准备模型配置 (调用新函数) ---
     print("正在准备模型专属配置...")
     model_config = prepare_model_config(params, data_config, model_name, dataset_name)
-    print(f"模型配置准备完毕。")
+    print("模型配置准备完毕。")
     print(f"为模型 {model_name} 准备的专属的模型配置: {model_config}")
     print(f"为模型 {model_name} 准备的专属的训练配置: {train_config}")
 
@@ -156,68 +92,101 @@ def run_training(params, data_config, train_config):
             raise ValueError("运行dimkt模型时, 必须在参数中提供 'difficult_levels'")
         diff_level = params["difficult_levels"]
         train_loader, valid_loader, *_ = init_dataset4train(
-            dataset_name, model_name, data_config, fold, batch_size, diff_level=diff_level
+            dataset_name,
+            model_name,
+            data_config,
+            fold,
+            batch_size,
+            diff_level=diff_level,
         )
     else:
         train_loader, valid_loader, *_ = init_dataset4train(
             dataset_name, model_name, data_config, fold, batch_size
         )
-    
+
     # --- 4.初始化模型和优化器 (集成所有特殊逻辑) ---
-    print(f"正在初始化模型: {model_name}...") 
+    print(f"正在初始化模型: {model_name}...")
     model = init_model(model_name, model_config, data_config[dataset_name], emb_type)
     print("模型初始化成功。")
 
-    print(f"使用优化器: {optimizer_type}, 学习率: {learning_rate}")
+    print("正在初始化模型优化器")
     if model_name == "hawkes":
         weight_p, bias_p = [], []
         for name, p in filter(lambda x: x[1].requires_grad, model.named_parameters()):
-            if 'bias' in name:
+            if "bias" in name:
                 bias_p.append(p)
             else:
                 weight_p.append(p)
-        optdict = [{'params': weight_p}, {'params': bias_p, 'weight_decay': 0}]
-        opt = torch.optim.Adam(optdict, lr=learning_rate, weight_decay=params.get('l2', 0))
-    elif model_name == "iekt":
-        opt = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-6)
-    elif model_name == "dtransformer":
-        opt = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
-    elif model_name == "dimkt":
-        opt = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=params.get('weight_decay', 0))
-    else: # 通用优化器逻辑
-        if optimizer_type == "sgd":
-            opt = SGD(model.parameters(), learning_rate, momentum=0.9)
-        elif optimizer_type == "adam":
-            opt = Adam(model.parameters(), lr=learning_rate)
-        else:
-            # 作为默认回退，避免未定义optimizer_type时报错
-            print(f"警告: 未知的优化器类型 '{optimizer_type}', 将使用默认的Adam。")
-            opt = Adam(model.parameters(), lr=learning_rate)
-            
+        parameters = [{"params": weight_p}, {"params": bias_p, "weight_decay": 0}]
+    else:
+        parameters = model.parameters()
+    opt = prepare_model_optimizer(
+        params, model_name, optimizer_type, parameters, learning_rate
+    )
+    print(f"使用优化器: {optimizer_type}, 学习率: {learning_rate}")
+
     # --- 6. 准备保存路径并保存配置 ---
-    params_str = f"{model_name}_{dataset_name}_seed{params['seed']}_fold{params['fold']}"
+    params_str = (
+        f"{model_name}_{dataset_name}_seed{params['seed']}_fold{params['fold']}"
+    )
     if params.get("add_uuid", 0) == 1:
         params_str += f"_{str(uuid.uuid4())[:8]}"
-    
+
     ckpt_path = os.path.join(save_dir, params_str)
     if not os.path.isdir(ckpt_path):
         os.makedirs(ckpt_path)
-    
+
     print(f"模型和日志将保存至: {ckpt_path}")
     print(f"正在向 {ckpt_path} 保存最终配置文件 (config.json)...")
     # 注意保存的是修正后的 model_config
-    save_config(train_config, model_config, data_config[dataset_name], params, ckpt_path)
+    save_config(
+        train_config, model_config, data_config[dataset_name], params, ckpt_path
+    )
     print("配置文件保存成功。")
 
     # --- 7. 开始训练 (集成rkt特殊逻辑) ---
     print("开始调用核心训练/评估函数 train_model...")
     if model_name == "rkt":
-        testauc, testacc, window_testauc, window_testacc, validauc, validacc, best_epoch = train_model(
-            model, train_loader, valid_loader, num_epochs, opt, ckpt_path, None, None, True, data_config[dataset_name], fold
+        (
+            testauc,
+            testacc,
+            window_testauc,
+            window_testacc,
+            validauc,
+            validacc,
+            best_epoch,
+        ) = train_model(
+            model,
+            train_loader,
+            valid_loader,
+            num_epochs,
+            opt,
+            ckpt_path,
+            None,
+            None,
+            True,
+            data_config[dataset_name],
+            fold,
         )
     else:
-        testauc, testacc, window_testauc, window_testacc, validauc, validacc, best_epoch = train_model(
-            model, train_loader, valid_loader, num_epochs, opt, ckpt_path, None, None, True
+        (
+            testauc,
+            testacc,
+            window_testauc,
+            window_testacc,
+            validauc,
+            validacc,
+            best_epoch,
+        ) = train_model(
+            model,
+            train_loader,
+            valid_loader,
+            num_epochs,
+            opt,
+            ckpt_path,
+            None,
+            None,
+            True,
         )
 
     print("\n【训练与评估完成】")
@@ -226,18 +195,26 @@ def run_training(params, data_config, train_config):
 
     if params.get("use_wandb", 0) == 1:
         import wandb
-        wandb.log({
-            "testauc": testauc, "testacc": testacc,
-            "window_testauc": window_testauc, "window_testacc": window_testacc,
-            "validauc": validauc, "validacc": validacc,
-            "best_epoch": best_epoch,
-        })
+
+        wandb.log(
+            {
+                "testauc": testauc,
+                "testacc": testacc,
+                "window_testauc": window_testauc,
+                "window_testacc": window_testacc,
+                "validauc": validauc,
+                "validacc": validacc,
+                "best_epoch": best_epoch,
+            }
+        )
+
 
 def run_standard_training(params, data_config, train_config):
     """任务一：标准训练"""
-    print("="*40)
+    print("=" * 40)
     print("✨ 执行任务：[标准训练]")
     run_training(params, data_config, train_config)
+
 
 # (你的遗忘学习相关函数无需修改，因为它们依赖于已保存的正确配置)
 def run_unlearning_retrain(params, data_config, train_config):
@@ -246,6 +223,7 @@ def run_unlearning_retrain(params, data_config, train_config):
     # 临时替换数据集为保留集
     temp_data_config = replace_dataset(params, data_config, "retain")
     run_training(params, temp_data_config, train_config)
+
 
 def run_unlearning_task(params, data_config):
     """
@@ -283,7 +261,12 @@ def run_unlearning_task(params, data_config):
     print(f"已加载预训练模型: {model_name} 于 {model_path}")
 
     # --- 2. 初始化 Unlearner 和数据加载器 ---
-    unlearner = Unlearner(model=original_model, model_name=model_name)
+    unlearner = Unlearner(
+        model=original_model,
+        model_name=model_name,
+        params=params,
+        optimizer_type=params.get("optimizer"),
+    )
     batch_size = params.get("batch_size", 64)
 
     retain_loader, forget_loader = None, None
@@ -307,6 +290,17 @@ def run_unlearning_task(params, data_config):
         print(
             f"遗忘集数据: {len(forget_loader.dataset)} 条， 其中验证集: {len(forget_valid_loader.dataset)} 条"
         )
+
+    if unlearn_method == "finetune":
+        # 获取参数，如果值为 None，则使用加入默认值
+        if params.get("finetune_epochs") is None:
+            params["finetune_epochs"] = 3
+
+        if params.get("finetune_lr") is None:
+            params["finetune_lr"] = 1e-4
+
+        if params.get("finetune_layers") is None:
+            params["finetune_layers"] = ["out", "output"]
 
     # --- 3. 调用统一接口执行遗忘 ---
     unlearner.unlearn(
@@ -370,6 +364,7 @@ def main(params):
     # --- Wandb 初始化 ---
     if params.get("use_wandb", 0) == 1:
         import wandb
+
         # 过滤掉值为None的参数，避免wandb报错
         wandb_config = {k: v for k, v in params.items() if v is not None}
         wandb.init(config=wandb_config, project="pykt-unlearn-project")
@@ -379,7 +374,7 @@ def main(params):
 
     # 加载通用配置和数据配置
     with open("../configs/kt_config.json") as f:
-        config_from_json = json.load(f) 
+        config_from_json = json.load(f)
     with open("../configs/data_config.json") as fin:
         data_config = json.load(fin)
 
@@ -406,16 +401,32 @@ def main(params):
     train_config = config_from_json.get("train_config", {})
     # 如果传入的batchsize大小为None，则根据模型名称调整 batch_size
     if params.get("batch_size") == 256:
-        if model_name in ["dkvmn","deep_irt", "sakt", "saint","saint++", "akt", "robustkt", "folibikt", "atkt", "lpkt", "skvmn", "dimkt"]:
-                train_config["batch_size"] = 64 ## because of OOM
-        if model_name in ["simplekt","stablekt", "bakt_time", "sparsekt"]:
-            train_config["batch_size"] = 64 ## because of OOM
+        if model_name in [
+            "dkvmn",
+            "deep_irt",
+            "sakt",
+            "saint",
+            "saint++",
+            "akt",
+            "robustkt",
+            "folibikt",
+            "atkt",
+            "lpkt",
+            "skvmn",
+            "dimkt",
+        ]:
+            train_config["batch_size"] = 64  ## because of OOM
+        if model_name in ["simplekt", "stablekt", "bakt_time", "sparsekt"]:
+            train_config["batch_size"] = 64  ## because of OOM
         if model_name in ["gkt"]:
-            train_config["batch_size"] = 16 
-        if model_name in ["qdkt","qikt"] and dataset_name in ['algebra2005','bridge2algebra2006']:
-            train_config["batch_size"] = 32 
+            train_config["batch_size"] = 16
+        if model_name in ["qdkt", "qikt"] and dataset_name in [
+            "algebra2005",
+            "bridge2algebra2006",
+        ]:
+            train_config["batch_size"] = 32
         if model_name in ["dtransformer"]:
-            train_config["batch_size"] = 32 ## because of OOM
+            train_config["batch_size"] = 32  ## because of OOM
     else:
         train_config["batch_size"] = params.get("batch_size")
     train_config["num_epochs"] = params.get("num_epochs")
