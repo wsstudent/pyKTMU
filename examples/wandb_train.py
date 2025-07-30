@@ -247,37 +247,42 @@ def run_unlearning_retrain(params, data_config, train_config):
     temp_data_config = replace_dataset(params, data_config, "retain")
     run_training(params, temp_data_config, train_config)
 
-
 def run_unlearning_task(params, data_config):
-    """任务三：执行基于预训练模型的遗忘任务"""
+    """
+    通用的遗忘任务执行器 (处理 surgical, ascent, finetune)
+    """
     unlearn_method = params["unlearn_method"]
     print(f"✨ 执行任务：[遗忘方法 - {unlearn_method}]")
 
     # --- 1. 加载预训练模型 ---
+    model_name, dataset_name, fold, emb_type, save_dir = (
+        params["model_name"],
+        params["dataset_name"],
+        params["fold"],
+        params["emb_type"],
+        params["save_dir"],
+    )
     if not params.get("model_ckpt_path"):
-        raise ValueError(f"使用 '{unlearn_method}' 方法时，必须提供 --model_ckpt_path 参数。")
+        raise ValueError(
+            f"使用 '{unlearn_method}' 方法时，必须提供 --model_ckpt_path 参数。"
+        )
 
     print(f"加载预训练模型于: {params['model_ckpt_path']}")
-    config_path = os.path.join(params["model_ckpt_path"], "config.json")
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"预训练模型的配置文件不存在: {config_path}")
-        
-    with open(config_path) as f:
+    with open(os.path.join(params["model_ckpt_path"], "config.json")) as f:
         pretrain_config = json.load(f)
         model_config = pretrain_config["model_config"]
         original_train_config = pretrain_config["train_config"]
 
-    model_name = params["model_name"]
-    emb_type = params["emb_type"]
-    dataset_name = params["dataset_name"]
-    original_model = init_model(model_name, model_config, data_config[dataset_name], emb_type)
+    original_model = init_model(
+        model_name, model_config, data_config[dataset_name], emb_type
+    )
     model_path = os.path.join(params["model_ckpt_path"], f"{emb_type}_model.ckpt")
     original_model.load_state_dict(torch.load(model_path, map_location=device))
     original_model.to(device)
-    original_model.eval()
+    original_model.eval()  # 先设置为评估模式
     print(f"已加载预训练模型: {model_name} 于 {model_path}")
-    
-    # --- 后续遗忘逻辑 (这部分你的设计很清晰，无需改动) ---
+
+    # --- 2. 初始化 Unlearner 和数据加载器 ---
     unlearner = Unlearner(model=original_model, model_name=model_name)
     batch_size = params.get("batch_size", 64)
 
@@ -287,7 +292,7 @@ def run_unlearning_task(params, data_config):
         print("正在初始化保留集数据加载器...")
         retain_data_config = replace_dataset(params, data_config, "retain")
         retain_loader, retain_valid_loader, *_ = init_dataset4train(
-            dataset_name, model_name, retain_data_config, params["fold"], batch_size
+            dataset_name, model_name, retain_data_config, fold, batch_size
         )
         print(
             f"保留集数据: {len(retain_loader.dataset)} 条, 其中验证集: {len(retain_valid_loader.dataset)} 条"
@@ -297,7 +302,7 @@ def run_unlearning_task(params, data_config):
         print("正在初始化遗忘集数据加载器...")
         forget_data_config = replace_dataset(params, data_config, "forget")
         forget_loader, forget_valid_loader, *_ = init_dataset4train(
-            dataset_name, model_name, forget_data_config, params["fold"], batch_size
+            dataset_name, model_name, forget_data_config, fold, batch_size
         )
         print(
             f"遗忘集数据: {len(forget_loader.dataset)} 条， 其中验证集: {len(forget_valid_loader.dataset)} 条"
@@ -332,7 +337,7 @@ def run_unlearning_task(params, data_config):
     if params.get("add_uuid", 0) == 1:
         params_str += f"_{str(uuid.uuid4())[:8]}"
 
-    ckpt_path = os.path.join(params["save_dir"], params_str)
+    ckpt_path = os.path.join(save_dir, params_str)
     if not os.path.isdir(ckpt_path):
         os.makedirs(ckpt_path)
 
