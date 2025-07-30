@@ -276,7 +276,7 @@ def main(params):
     # 准备要保存到CSV的数据行
     # 注意：这里的键名将作为CSV文件的列名
     csv_row_data = {
-        "模型": trained_params.get("model_name", "N/A"),
+        "模型": params.get("save_path", "N/A"),
         "数据集": trained_params.get("dataset_name", "N/A"),
         "遗忘策略": params.get("unlearn_strategy", "none"),
         "遗忘比例": params.get("forget_ratio", 0.0),
