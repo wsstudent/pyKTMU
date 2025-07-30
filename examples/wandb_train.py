@@ -300,7 +300,24 @@ def run_unlearning_task(params, data_config):
             params["finetune_lr"] = 1e-4
 
         if params.get("finetune_layers") is None:
-            params["finetune_layers"] = ["out", "output"]
+            if model_name == "dkvmn":
+                # 根据我们之前的分析，为 dkvmn 设置正确的层
+                finetune_layers = ["p_layer", "f_layer"]
+                print(f"检测到模型为 DKVMN, 自动设置微调层为: {finetune_layers}")
+
+            # 这里为其他有特殊层名的模型添加 elif 判断
+            # elif model_name == "some_other_model":
+            #     finetune_layers = ["specific_layer_for_that_model"]
+            #     print(f"-> 检测到模型为 {model_name}, 自动设置微调层为: {finetune_layers}")
+
+            else:
+                # 对于所有其他未特殊指定的模型，使用通用默认值
+                finetune_layers = ["out", "output"]
+                print(
+                    f"未找到模型 '{model_name}' 的特定配置, 使用默认微调层: {finetune_layers}"
+                )
+
+            params["finetune_layers"] = finetune_layers
 
     # --- 3. 调用统一接口执行遗忘 ---
     unlearner.unlearn(
