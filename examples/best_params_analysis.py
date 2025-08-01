@@ -1,15 +1,33 @@
 import os
 import itertools
 import argparse
+import csv
+import subprocess
+import re
 
-# --- 1. 实验配置 ---
+# ==============================================================================
+#                                  配置区
+# ==============================================================================
+# --- 实验参数 ---
 MODELS = ["dkt", "dkvmn", "sakt"]
 DATASETS = ["assist2009", "assist2017", "nips_task34"]
 STRATEGIES = ["random", "low_performance", "high_performance"]
 RATIOS = [0.2, 0.4, 0.8]
 ALPHAS = [1.0, 5.0, 10.0, 20.0, 50.0, 100.0]
 
-# --- 2. 预训练模型检查点路径映射 ---
+# --- 自动重试参数 ---
+BATCH_SIZES_TO_TRY = [None, 256, 128, 64, 32]
+OOM_KEYWORDS = ["out of memory", "CUDA error", "resource exhausted", "cuDNN error"]
+
+# --- 路径定义 ---
+# 预训练模型所在的父目录
+PRETRAINED_MODEL_PARENT_DIR = "saved_model/standard_training"
+# 遗忘实验结果保存的父目录
+PARENT_SAVE_DIR = "saved_model/unlearning_runs"
+# 评估结果CSV文件的保存路径
+RESULTS_CSV_PATH = "../data/evaluation_results.csv"
+
+# --- 预训练模型检查点路径映射 ---
 CKPT_MAP = {
     ("dkt", "assist2009"): "dkt_assist2009_seed42_fold0_412eb83f",
     ("dkt", "assist2017"): "dkt_assist2017_seed42_fold0_9decca36",
@@ -21,14 +39,56 @@ CKPT_MAP = {
     ("sakt", "assist2017"): "sakt_assist2017_seed42_fold0_fbba0205d",
     ("sakt", "nips_task34"): "sakt_nips_task34_seed42_fold0_5f025f8d",
 }
-
-# --- 3. 定义统一的父目录 ---
-# 所有遗忘模型都将保存在这个目录下，每个任务一个子文件夹
-PARENT_SAVE_DIR = "saved_model/unlearning_runs"
+# ==============================================================================
 
 
-def run_command(command):
-    """一个辅助函数，用于打印并执行系统命令，并在出错时停止脚本"""
+# ==============================================================================
+#                                  辅助函数
+# ==============================================================================
+def run_command_with_retry(base_command, batch_sizes):
+    """
+    为训练过程设计的命令执行函数，带OOM自动重试逻辑。
+    """
+    for bs in batch_sizes:
+        command = base_command
+        if bs is not None:
+            command += f" --batch_size {bs}"
+
+        current_bs_str = f"default" if bs is None else str(bs)
+        print(f"🚀 Attempting to execute with batch_size: {current_bs_str}")
+        print(f"   Command: {command}")
+
+        result = subprocess.run(
+            command, shell=True, capture_output=True, text=True, encoding="utf-8"
+        )
+
+        if result.returncode == 0:
+            print(f"✅ Success with batch_size: {current_bs_str}")
+            return True
+
+        stderr_lower = result.stderr.lower()
+        is_oom_error = any(keyword in stderr_lower for keyword in OOM_KEYWORDS)
+
+        if is_oom_error:
+            print(
+                f"🟡 OOM Error detected with batch_size: {current_bs_str}. Retrying with smaller batch size..."
+            )
+        else:
+            print(f"❌ Unrecoverable Error with batch_size: {current_bs_str}.")
+            print("   Error is not related to OOM. Halting retries for this task.")
+            print(
+                "------ Begin Stderr ------\n{result.stderr}\n------- End Stderr -------"
+            )
+            return False
+
+    print(f"❌ Task failed after trying all batch sizes: {batch_sizes}")
+    return False
+
+
+def run_simple_command(command):
+    """
+    为评估过程设计的简单命令执行函数。
+    """
     print(f"🚀 Executing: {command}")
     return_code = os.system(command)
     if return_code != 0:
@@ -36,9 +96,15 @@ def run_command(command):
         exit(1)
 
 
+# ==============================================================================
+
+
+# ==============================================================================
+#                                  训练函数
+# ==============================================================================
 def run_unlearning_experiments():
-    """执行训练任务"""
-    print("===== 🚀 开始执行遗忘训练任务 (支持断点续跑) 🚀 =====")
+    """执行训练任务，带断点续跑和自动batch_size调整功能"""
+    print("===== 🚀 开始执行遗忘训练任务 (支持断点续跑和OOM重试) 🚀 =====")
     os.makedirs(PARENT_SAVE_DIR, exist_ok=True)
 
     combinations = list(itertools.product(MODELS, DATASETS, STRATEGIES, RATIOS, ALPHAS))
@@ -46,31 +112,27 @@ def run_unlearning_experiments():
     for i, (model, dataset, strategy, ratio, alpha) in enumerate(combinations):
         print("-" * 80)
         print(
-            f"🔄 检查任务: {i + 1}/{len(combinations)} -> M:{model}, D:{dataset}, S:{strategy}, R:{ratio}, A:{alpha}"
+            f"🔄 检查训练任务: {i + 1}/{len(combinations)} -> M:{model}, D:{dataset}, S:{strategy}, R:{ratio}, A:{alpha}"
         )
 
-        # ★ 新增：断点续跑逻辑 (训练) ★
-        # 1. 检查预期的输出文件夹是否已存在
+        # --- 断点续跑逻辑 ---
         expected_prefix = (
             f"surgical_{model}_{dataset}_{strategy}_ratio{ratio}_alpha{alpha}"
         )
         try:
-            # 列出父目录下的所有文件夹
             all_dirs = [
                 d
                 for d in os.listdir(PARENT_SAVE_DIR)
                 if os.path.isdir(os.path.join(PARENT_SAVE_DIR, d))
             ]
-            # 查找匹配前缀的文件夹
             matches = [d for d in all_dirs if d.startswith(expected_prefix)]
             if len(matches) > 0:
                 print(f"✅ 跳过: 已找到输出文件夹 {matches[0]}。")
-                continue  # 如果已存在，直接跳到下一个循环
+                continue
         except FileNotFoundError:
-            # 如果父目录不存在，说明是第一次运行，正常继续
             pass
 
-        # 2. 如果文件夹不存在，则执行训练命令
+        # --- 执行命令逻辑 ---
         train_script = f"wandb_{model}_train.py"
         model_ckpt_key = (model, dataset)
         if model_ckpt_key not in CKPT_MAP:
@@ -80,34 +142,57 @@ def run_unlearning_experiments():
             continue
         model_ckpt_folder = CKPT_MAP[model_ckpt_key]
 
-        command = (
+        base_command = (
             f"python {train_script} --dataset_name {dataset} --unlearn_method surgical "
-            f"--model_ckpt_path saved_model/standard_training/{model_ckpt_folder} "
+            f"--model_ckpt_path {PRETRAINED_MODEL_PARENT_DIR}/{model_ckpt_folder} "
             f"--alpha {alpha} --unlearn_strategy {strategy} --forget_ratio {ratio} "
             f"--save_dir {PARENT_SAVE_DIR} --use_wandb 0"
         )
-        run_command(command)
+
+        run_command_with_retry(base_command, BATCH_SIZES_TO_TRY)
 
     print("✅ 所有遗忘训练任务已完成！")
 
 
-def run_evaluation():
-    """对所有已训练的遗忘模型进行评估 (智能搜索版)"""
-    print("===== 📊 开始执行评估任务 📊 =====")
+# ==============================================================================
 
-    if not os.path.isdir(PARENT_SAVE_DIR):
-        print(f"❌ 错误: 父目录 {PARENT_SAVE_DIR} 不存在, 请先运行训练。")
-        return
+
+# ==============================================================================
+#                                  评估函数
+# ==============================================================================
+def run_evaluation():
+    """执行评估任务，带断点续跑功能"""
+    print("===== 📊 开始执行评估任务 (支持断点续跑) 📊 =====")
+
+    # --- 断点续跑逻辑 ---
+    completed_evals = set()
+    try:
+        # 确保CSV文件的父目录存在
+        os.makedirs(os.path.dirname(RESULTS_CSV_PATH), exist_ok=True)
+        with open(RESULTS_CSV_PATH, "r", newline="", encoding="utf-8-sig") as csvfile:
+            reader = csv.reader(csvfile)
+            header = next(reader)
+            # 根据您CSV的列名来确定索引
+            model_path_idx = header.index("模型")
+            test_type_idx = header.index("测试集类型")
+
+            for row in reader:
+                if row:  # 避免空行
+                    completed_evals.add((row[model_path_idx], row[test_type_idx]))
+        print(
+            f"已从 {RESULTS_CSV_PATH} 加载 {len(completed_evals)} 条已完成的评估记录。"
+        )
+    except (FileNotFoundError, StopIteration):
+        print("未找到现有结果文件或文件为空，将从头开始评估。")
+    except ValueError as e:
+        print(f"CSV文件表头错误，请检查列名是否包含'模型'和'测试集类型'。错误: {e}")
 
     combinations = list(itertools.product(MODELS, DATASETS, STRATEGIES, RATIOS, ALPHAS))
 
     for i, (model, dataset, strategy, ratio, alpha) in enumerate(combinations):
-        # 1. 构建预期的目录前缀，确保与训练脚本的命名规则一致
         expected_prefix = (
             f"surgical_{model}_{dataset}_{strategy}_ratio{ratio}_alpha{alpha}"
         )
-
-        # 2. 在父目录中搜索所有文件夹
         try:
             all_dirs = [
                 d
@@ -115,53 +200,49 @@ def run_evaluation():
                 if os.path.isdir(os.path.join(PARENT_SAVE_DIR, d))
             ]
         except FileNotFoundError:
-            print(f"❌ 错误: 无法访问目录 {PARENT_SAVE_DIR}。")
+            print(f"❌ 错误: 训练输出目录 {PARENT_SAVE_DIR} 不存在。请先运行训练。")
             break
 
-        # 3. 找到匹配的文件夹
         matches = [d for d in all_dirs if d.startswith(expected_prefix)]
-
         if len(matches) != 1:
-            # 如果没有找到或找到多个，打印警告并跳过
-            if len(matches) > 1:
-                print(
-                    f"⚠️ 警告: 找到多个匹配 '{expected_prefix}' 的目录: {matches}。请检查命名规则。跳过此项评估。"
-                )
             continue
 
-        # 成功找到唯一的目录
         eval_save_dir = os.path.join(PARENT_SAVE_DIR, matches[0])
 
-        print("-" * 80)
-        print(f"🔄 进度: {i + 1}/{len(combinations)}")
-        print(f"✅ 找到评估目录: {eval_save_dir}")
-        print("-" * 80)
-
-        # 4. 对 "forget" 和 "retain" 集合分别进行评估
         for test_file_type in ["forget", "retain"]:
-            print(f"  - 正在评估 {test_file_type.upper()} SET...")
+            print("-" * 80)
+            print(f"🔄 检查评估任务: {eval_save_dir} on {test_file_type} SET")
+
+            # --- 断点续跑检查 ---
+            if (eval_save_dir, test_file_type) in completed_evals:
+                print(f"✅ 跳过: 在CSV中已找到该评估记录。")
+                continue
+
+            # --- 执行命令 ---
             command = (
-                f"python wandb_predict.py "
-                f"--save_dir {eval_save_dir} "
-                f"--unlearn_strategy {strategy} "
-                f"--forget_ratio {ratio} "
-                f"--unlearn_test_file {test_file_type} "
+                f"python wandb_predict.py "  # 假设您的评估脚本名为 wandb_predict.py
+                f"--save_dir {eval_save_dir} --unlearn_strategy {strategy} "
+                f"--forget_ratio {ratio} --unlearn_test_file {test_file_type} "
                 f"--use_wandb 0"
             )
-            run_command(command)
 
-    print("✅ 所有评估任务已完成！")
+            run_simple_command(command)
+
+    print(f"✅ 所有评估调用已完成！")
 
 
-# --- 主程序入口 ---
+# ==============================================================================
+
+
+# ==============================================================================
+#                                  主程序入口
+# ==============================================================================
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="运行模型遗忘和评估的自动化脚本 (最终版)"
-    )
+    parser = argparse.ArgumentParser(description="模型遗忘和评估自动化调度器 (最终版)")
     parser.add_argument(
         "action",
         choices=["train", "eval", "all"],
-        help="选择要执行的操作: 'train' - 仅运行遗忘训练, 'eval' - 仅运行评估, 'all' - 依次运行训练和评估",
+        help="选择要执行的操作: 'train', 'eval', 'all'",
     )
     args = parser.parse_args()
 
@@ -172,3 +253,4 @@ if __name__ == "__main__":
     elif args.action == "all":
         run_unlearning_experiments()
         run_evaluation()
+# ==============================================================================

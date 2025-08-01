@@ -290,6 +290,8 @@ def main(params):
     # 调用函数保存数据
     save_results_to_csv(csv_row_data, results_csv_path)
 
+    return
+
     # 6.2 滑动窗口测试集评估
     save_test_window_path = os.path.join(
         save_dir, f"{model.emb_type}_test_window_predictions.txt"

@@ -11,7 +11,11 @@ data/*
 # models
 examples/wandb/*
 examples/saved_model/*  
-
+analysis_plots_acc/
+# Analysis plots
+analysis_plots/
+processed_results_summary_acc.csv
+processed_results_summary.csv
 
 # Virtual environments
 .venv
