@@ -344,7 +344,14 @@ def run_unlearning_task(params, data_config):
     elif unlearn_method == "finetune":
         method_params_str = f"ep{params['finetune_epochs']}_lr{params['finetune_lr']}"
 
-    params_str = f"{unlearn_method}_{model_name}_{dataset_name}_{method_params_str}_seed{params['seed']}"
+    strategy_str = params.get("unlearn_strategy", "unknown_strategy")
+    ratio_str = f"ratio{params.get('forget_ratio', 'unknown_ratio')}"
+
+    # 构建一个信息更完整的文件夹名
+    params_str = (
+        f"{unlearn_method}_{model_name}_{dataset_name}_"
+        f"{strategy_str}_{ratio_str}_{method_params_str}_seed{params['seed']}"
+    )
     if params.get("add_uuid", 0) == 1:
         params_str += f"_{str(uuid.uuid4())[:8]}"
 

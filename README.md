@@ -82,7 +82,13 @@ python data_preprocess.py \
 * `train_valid_sequences_forget_{strategy}_ratio{ratio}.csv`
 * `test_sequences_retrain_{strategy}_ratio{ratio}.csv`
 * `test_sequences_forget_{strategy}_ratio{ratio}.csv`
-其中遗忘策略有5种：`random`, `sequential`, `random_sequential`, `sequential_random`, `sequential_sequential`。
+
+支持的策略：
+  - random: 随机选择用户进行遗忘
+  - low_performance: 选择低表现用户进行遗忘
+  - high_performance: 选择高表现用户进行遗忘  
+  - low_engagement: 选择低参与度用户进行遗忘
+  - unstable_performance: 选择表现不稳定的用户进行遗忘
 
 ---
 
