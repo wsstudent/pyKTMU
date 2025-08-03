@@ -9,11 +9,11 @@ import re
 #                                  配置区
 # ==============================================================================
 # --- 实验参数 ---
-MODELS = ["dkt", "dkvmn", "sakt", "dkt+"]
+MODELS = ["dkvmn", "dkt", "dkt_plus","sakt"]
 DATASETS = ["assist2009", "assist2017", "nips_task34"]
-STRATEGIES = [ "low_performance", "high_performance", "low_engagement"]
-RATIOS = [0.2, 0.4, 0.8]
-ALPHAS = [1.0, 5.0, 10.0, 20.0, 50.0, 100.0]
+STRATEGIES = ["low_engagement", "low_performance", "high_performance"]
+RATIOS = [0.2, 0.8]
+ALPHAS = [-1.0, -5.0, -10.0, 1.0, 5.0, 10.0, 20.0, 50.0, 100.0]
 
 # --- 自动重试参数 ---
 BATCH_SIZES_TO_TRY = [None, 256, 128, 64, 32]
@@ -37,15 +37,15 @@ CKPT_MAP = {
     ("dkt", "assist2009"): "dkt_assist2009_seed42_fold0_412eb83f",
     ("dkt", "assist2017"): "dkt_assist2017_seed42_fold0_9decca36",
     ("dkt", "nips_task34"): "dkt_nips_task34_seed42_fold0_0a68a45b",
-    ("dkt+", "assist2009"): "dkt+_assist2009_seed42_fold0_8692c728",
-    ("dkt+", "assist2017"): "dkt+_assist2017_seed42_fold0_a54da986",
-    ("dkt+", "nips_task34"): "dkt+_nips_task34_seed42_fold0_4b2cba7f",
     ("dkvmn", "assist2009"): "dkvmn_assist2009_seed42_fold0_38beccef",
     ("dkvmn", "assist2017"): "dkvmn_assist2017_seed42_fold0_ebee298a",
     ("dkvmn", "nips_task34"): "dkvmn_nips_task34_seed42_fold0_c50f8c31",
     ("sakt", "assist2009"): "sakt_assist2009_seed42_fold0_3a7ced70",
-    ("sakt", "assist2017"): "sakt_assist2017_seed42_fold0_fbba0205",
+    ("sakt", "assist2017"): "sakt_assist2017_seed42_fold0_fbba0205d",
     ("sakt", "nips_task34"): "sakt_nips_task34_seed42_fold0_5f025f8d",
+    ("dkt_plus", "assist2009"): "dkt+_assist2009_seed42_fold0_8692c728",
+    ("dkt_plus", "assist2017"): "dkt+_assist2017_seed42_fold0_a54da986",
+    ("dkt_plus", "nips_task34"): "dkt+_nips_task34_seed42_fold0_4b2cba7f",
 }
 # ==============================================================================
 
@@ -94,7 +94,7 @@ def run_command_with_retry(base_command, batch_sizes):
                 print(f"   状态: 执行成功 (返回码: 0)。")
             else:
                 print(f"   状态: 执行时发生非内存错误 (返回码: {result.returncode})。")
-            
+
             # 打印最终的输出，供用户自己判断
             print("------ Begin Stderr (如有) ------")
             print(result.stderr)
@@ -171,7 +171,7 @@ def run_unlearning_experiments():
             f"--save_dir {PARENT_SAVE_DIR} --use_wandb 0"
         )
 
-        run_command_with_retry(base_command, BATCH_SIZES_TO_TRY)
+        run_simple_command(base_command)
 
     print("✅ 所有遗忘训练任务已完成！")
 
