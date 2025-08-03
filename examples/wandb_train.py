@@ -1,6 +1,8 @@
 import os
 import argparse
 import json
+import time
+
 import torch
 import copy
 import uuid
@@ -213,8 +215,11 @@ def run_standard_training(params, data_config, train_config):
     """任务一：标准训练"""
     print("=" * 40)
     print("✨ 执行任务：[标准训练]")
+    start_time = time.time()  # Record the start time
     run_training(params, data_config, train_config)
-
+    end_time = time.time()  # Record the end time
+    # Calculate and print the runtime
+    print(f"执行时间: {end_time - start_time:.2f} 秒")
 
 # (你的遗忘学习相关函数无需修改，因为它们依赖于已保存的正确配置)
 def run_unlearning_retrain(params, data_config, train_config):
