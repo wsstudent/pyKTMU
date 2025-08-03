@@ -3,7 +3,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-
+import time
 from pykt.models.train_model import model_forward
 from pykt.utils.utils import prepare_model_optimizer
 
@@ -67,6 +67,7 @@ class Unlearner:
     # --- 私有辅助方法 ---
     def _execute_surgical(self, retain_loader, forget_loader, alpha, device):
         print("步骤 1/3: 正在保留集上计算费雪信息...")
+        start_time = time.time()  # Record the start time
         self._compute_fisher(retain_loader, device)
         fisher_retain = self.fisher_dict.copy()
         print("完成。")
@@ -79,15 +80,21 @@ class Unlearner:
             forget_loader, fisher_retain, fisher_forget, alpha, device
         )
         print("精准手术式遗忘完成。")
+        end_time = time.time()  # Record the end time
+        # Calculate and print the runtime
+        print(f"执行时间: {end_time - start_time:.2f} 秒")
 
     def _execute_ascent(self, forget_loader, alpha, device):
         print("阶段 1/2: 正在遗忘集上计算费雪信息...")
+        start_time = time.time()
         self._compute_fisher(forget_loader, device)
         print("完成。")
         print("阶段 2/2: 正在执行梯度上升遗忘...")
         self._perform_ascent(forget_loader, alpha, device)
         print("梯度上升式遗忘完成。")
-
+        end_time = time.time()  # Record the end time
+        # Calculate and print the runtime
+        print(f"执行时间: {end_time - start_time:.2f} 秒")
     def _execute_finetune(self, retain_loader, device, **kwargs):
         # 从 kwargs 获取参数，如果值为 None，则使用默认值
         epochs = kwargs.get("finetune_epochs")
@@ -130,8 +137,9 @@ class Unlearner:
                 if param.grad is not None and name in fisher_retain:
                     f_retain = fisher_retain[name].clamp(min=1e-8)
                     f_forget = fisher_forget.get(name, torch.zeros_like(f_retain))
+                    # importance = f_forget / (f_forget + f_retain + 1e-8)
                     importance = f_forget / (f_forget + f_retain + 1e-8)
-                    param.data -= alpha * importance * param.grad
+                    param.data += alpha * importance * param.grad
         self.model.zero_grad()
 
     def _perform_ascent(self, forget_loader, alpha, device):
