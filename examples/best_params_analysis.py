@@ -9,15 +9,20 @@ import re
 #                                  配置区
 # ==============================================================================
 # --- 实验参数 ---
-MODELS = ["dkt", "dkvmn", "sakt"]
+MODELS = ["dkt", "dkvmn", "sakt", "dkt+"]
 DATASETS = ["assist2009", "assist2017", "nips_task34"]
-STRATEGIES = ["random", "low_performance", "high_performance"]
+STRATEGIES = [ "low_performance", "high_performance", "low_engagement"]
 RATIOS = [0.2, 0.4, 0.8]
 ALPHAS = [1.0, 5.0, 10.0, 20.0, 50.0, 100.0]
 
 # --- 自动重试参数 ---
 BATCH_SIZES_TO_TRY = [None, 256, 128, 64, 32]
-OOM_KEYWORDS = ["out of memory", "CUDA error", "resource exhausted", "cuDNN error"]
+MEMORY_ERROR_KEYWORDS = [
+    "cuda out of memory",  # PyTorch 标准 OOM
+    "out of memory",       # 通用 OOM
+    "nvml_success",        # 您遇到的 NVML/CUDACachingAllocator 错误
+    "cudacachingallocator.cpp" # 同上，增加一个特征词
+]
 
 # --- 路径定义 ---
 # 预训练模型所在的父目录
@@ -32,11 +37,14 @@ CKPT_MAP = {
     ("dkt", "assist2009"): "dkt_assist2009_seed42_fold0_412eb83f",
     ("dkt", "assist2017"): "dkt_assist2017_seed42_fold0_9decca36",
     ("dkt", "nips_task34"): "dkt_nips_task34_seed42_fold0_0a68a45b",
+    ("dkt+", "assist2009"): "dkt+_assist2009_seed42_fold0_8692c728",
+    ("dkt+", "assist2017"): "dkt+_assist2017_seed42_fold0_a54da986",
+    ("dkt+", "nips_task34"): "dkt+_nips_task34_seed42_fold0_4b2cba7f",
     ("dkvmn", "assist2009"): "dkvmn_assist2009_seed42_fold0_38beccef",
     ("dkvmn", "assist2017"): "dkvmn_assist2017_seed42_fold0_ebee298a",
     ("dkvmn", "nips_task34"): "dkvmn_nips_task34_seed42_fold0_c50f8c31",
     ("sakt", "assist2009"): "sakt_assist2009_seed42_fold0_3a7ced70",
-    ("sakt", "assist2017"): "sakt_assist2017_seed42_fold0_fbba0205d",
+    ("sakt", "assist2017"): "sakt_assist2017_seed42_fold0_fbba0205",
     ("sakt", "nips_task34"): "sakt_nips_task34_seed42_fold0_5f025f8d",
 }
 # ==============================================================================
@@ -47,42 +55,56 @@ CKPT_MAP = {
 # ==============================================================================
 def run_command_with_retry(base_command, batch_sizes):
     """
-    为训练过程设计的命令执行函数，带OOM自动重试逻辑。
+    执行一个训练命令。仅当遇到内存相关错误时，才用更小的 batch_size 自动重试。
+    对于其他任何情况（成功或非内存错误），则直接“放行”，并停止重试。
+
+    :param base_command: str, 不包含 --batch_size 参数的基础命令字符串。
+    :param batch_sizes: list, 一个包含要尝试的 batch_size 的列表，例如 [256, 128, 64]。
+    :return: bool, 包装脚本的任务是否完成 (True) 或因内存耗尽而彻底失败 (False)。
     """
     for bs in batch_sizes:
+        # 2. 构建当前要执行的完整命令
         command = base_command
         if bs is not None:
             command += f" --batch_size {bs}"
 
-        current_bs_str = f"default" if bs is None else str(bs)
-        print(f"🚀 Attempting to execute with batch_size: {current_bs_str}")
-        print(f"   Command: {command}")
+        current_bs_str = "默认值" if bs is None else str(bs)
+        print(f"🚀 正在尝试使用 batch_size: {current_bs_str}")
+        print(f"   命令: {command}")
 
+        # 3. 执行命令
         result = subprocess.run(
-            command, shell=True, capture_output=True, text=True, encoding="utf-8"
+            command, shell=True, capture_output=True, text=True, encoding="utf-8", errors="ignore"
         )
 
-        if result.returncode == 0:
-            print(f"✅ Success with batch_size: {current_bs_str}")
-            return True
-
+        # 4. 分析错误输出，判断是否为内存错误
         stderr_lower = result.stderr.lower()
-        is_oom_error = any(keyword in stderr_lower for keyword in OOM_KEYWORDS)
+        is_memory_error = any(keyword in stderr_lower for keyword in MEMORY_ERROR_KEYWORDS)
 
-        if is_oom_error:
-            print(
-                f"🟡 OOM Error detected with batch_size: {current_bs_str}. Retrying with smaller batch size..."
-            )
+        # 5. 核心判断逻辑
+        #   仅当【确实发生了错误(returncode!=0)】且【是内存相关错误】时，才重试
+        if result.returncode != 0 and is_memory_error:
+            print(f"🟡 检测到内存相关错误 with batch_size: {current_bs_str}。准备重试...")
+            # 让循环继续，尝试下一个更小的 batch_size
+            continue
         else:
-            print(f"❌ Unrecoverable Error with batch_size: {current_bs_str}.")
-            print("   Error is not related to OOM. Halting retries for this task.")
-            print(
-                "------ Begin Stderr ------\n{result.stderr}\n------- End Stderr -------"
-            )
-            return False
+            # 对于任何其他情况 (成功 或 非内存错误)，我们都“放行”
+            print(f"✅ 任务执行完毕或遇到非内存错误，按要求放行。")
+            if result.returncode == 0:
+                print(f"   状态: 执行成功 (返回码: 0)。")
+            else:
+                print(f"   状态: 执行时发生非内存错误 (返回码: {result.returncode})。")
+            
+            # 打印最终的输出，供用户自己判断
+            print("------ Begin Stderr (如有) ------")
+            print(result.stderr)
+            print("------- End Stderr -------")
+            return True  # 返回 True，表示“哨兵”任务完成，不再干预
 
-    print(f"❌ Task failed after trying all batch sizes: {batch_sizes}")
+    # 6. 如果所有 batch_size 都因内存错误而失败
+    print(f"❌ 任务失败。已尝试所有指定的 batch_size，但均因内存不足而失败: {batch_sizes}")
     return False
+
 
 
 def run_simple_command(command):
