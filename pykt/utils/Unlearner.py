@@ -1,4 +1,4 @@
-# 文件路径: pykt/utils/Unlearner.py
+# File path: pykt/utils/Unlearner.py
 
 import torch
 import torch.nn as nn
@@ -10,16 +10,16 @@ from pykt.utils.utils import prepare_model_optimizer
 
 class Unlearner:
     """
-    一个集成了多种遗忘策略的、通用的遗忘处理器。
-    所有方法都基于通用的 `model_forward` 函数，以实现对多种模型的广泛兼容。
+    A general unlearning handler that integrates multiple unlearning strategies.
+    All methods rely on the generic `model_forward` function to ensure broad compatibility across models.
     """
 
     def __init__(self, model, model_name, params, optimizer_type="adam"):
         """
-        初始化 Unlearner。
+        Initialize Unlearner.
         Args:
-            model: 需要进行遗忘操作的已训练好的模型。
-            model_name (str): 模型的名称，用于 `model_forward` 函数选择正确的处理逻辑。
+            model: A trained model that will undergo unlearning.
+            model_name (str): The model name used by `model_forward` to select the correct handling logic.
         """
         if not hasattr(model, "model_name"):
             model.model_name = model_name
@@ -38,77 +38,78 @@ class Unlearner:
         **kwargs,
     ):
         """
-        执行机器学习遗忘的统一入口。
+        Unified entry point for machine unlearning execution.
         """
-        print(f"Unlearner: 执行遗忘策略 '{method}'")
+        print(f"Unlearner: executing unlearning strategy '{method}'")
 
         if method == "surgical":
             if retain_loader is None or forget_loader is None:
                 raise ValueError(
-                    "使用 'surgical' 方法时，必须同时提供 `retain_loader` 和 `forget_loader`。"
+                    "For the 'surgical' method, both `retain_loader` and `forget_loader` must be provided."
                 )
             self._execute_surgical(retain_loader, forget_loader, alpha, device)
 
         elif method == "ascent":
             if forget_loader is None:
-                raise ValueError("使用 'ascent' 方法时，必须提供 `forget_loader`。")
+                raise ValueError("For the 'ascent' method, `forget_loader` must be provided.")
             self._execute_ascent(forget_loader, alpha, device)
 
         elif method == "finetune":
             if retain_loader is None:
-                raise ValueError("使用 'finetune' 方法时，必须提供 `retain_loader`。")
+                raise ValueError("For the 'finetune' method, `retain_loader` must be provided.")
             self._execute_finetune(retain_loader, device, **kwargs)
 
         else:
             raise ValueError(
-                f"未知的遗忘方法: '{method}'。可用选项为 'surgical', 'ascent', 'finetune'。"
+                f"Unknown unlearning method: '{method}'. Available options: 'surgical', 'ascent', 'finetune'."
             )
 
-    # --- 私有辅助方法 ---
+    # --- Private helper methods ---
     def _execute_surgical(self, retain_loader, forget_loader, alpha, device):
-        print("步骤 1/3: 正在保留集上计算费雪信息...")
+        print("Step 1/3: computing Fisher information on the retain set...")
         start_time = time.time()  # Record the start time
         self._compute_fisher(retain_loader, device)
         fisher_retain = self.fisher_dict.copy()
-        print("完成。")
-        print("步骤 2/3: 正在遗忘集上计算费雪信息...")
+        print("Done.")
+        print("Step 2/3: computing Fisher information on the forget set...")
         self._compute_fisher(forget_loader, device)
         fisher_forget = self.fisher_dict.copy()
-        print("完成。")
-        print("步骤 3/3: 正在执行梯度擦除...")
+        print("Done.")
+        print("Step 3/3: performing gradient erasure...")
         self._gradient_erasure(
             forget_loader, fisher_retain, fisher_forget, alpha, device
         )
-        print("精准手术式遗忘完成。")
+        print("Surgical unlearning completed.")
         end_time = time.time()  # Record the end time
         # Calculate and print the runtime
-        print(f"执行时间: {end_time - start_time:.2f} 秒")
+        print(f"Elapsed time: {end_time - start_time:.2f} seconds")
 
     def _execute_ascent(self, forget_loader, alpha, device):
-        print("阶段 1/2: 正在遗忘集上计算费雪信息...")
+        print("Phase 1/2: computing Fisher information on the forget set...")
         start_time = time.time()
         self._compute_fisher(forget_loader, device)
-        print("完成。")
-        print("阶段 2/2: 正在执行梯度上升遗忘...")
+        print("Done.")
+        print("Phase 2/2: performing gradient-ascent unlearning...")
         self._perform_ascent(forget_loader, alpha, device)
-        print("梯度上升式遗忘完成。")
+        print("Gradient-ascent unlearning completed.")
         end_time = time.time()  # Record the end time
         # Calculate and print the runtime
-        print(f"执行时间: {end_time - start_time:.2f} 秒")
+        print(f"Elapsed time: {end_time - start_time:.2f} seconds")
+
     def _execute_finetune(self, retain_loader, device, **kwargs):
-        # 从 kwargs 获取参数，如果值为 None，则使用默认值
+        # Get parameters from kwargs; if None, use defaults
         epochs = kwargs.get("finetune_epochs")
         lr = kwargs.get("finetune_lr")
         layers_to_finetune = kwargs.get("finetune_layers")
         if layers_to_finetune is None:
             layers_to_finetune = ["out", "output"]
-        print(f"开始部分微调，共 {epochs} 轮，学习率为 {lr}。")
-        print(f"将解冻包含以下关键字的层: {layers_to_finetune}")
+        print(f"Start partial fine-tuning: {epochs} epochs, learning rate {lr}.")
+        print(f"Unfreezing layers containing keywords: {layers_to_finetune}")
         self._set_trainable_layers(layers_to_finetune)
         self._perform_finetune_loop(retain_loader, epochs, lr, device)
-        print("微调完成，正在解冻所有模型参数...")
+        print("Fine-tuning finished; unfreezing all model parameters...")
         self._unfreeze_all_layers()
-        print("模型已恢复正常可训练状态。")
+        print("Model restored to normal trainable state.")
 
     def _compute_fisher(self, loader, device):
         self.model.train()
@@ -171,8 +172,8 @@ class Unlearner:
             params=self.params,
             model_name=self.model.model_name,
             optimizer_type=self.optimizer_type,
-            parameters=trainable_params,  # 关键：只为可训练的参数创建优化器！
-            learning_rate=lr,  # 使用微调专用的学习率
+            parameters=trainable_params,  # Key: create optimizer only for trainable parameters!
+            learning_rate=lr,  # Use the fine-tuning-specific learning rate
         )
         self.model.train()
         for epoch in range(epochs):
@@ -184,4 +185,4 @@ class Unlearner:
                 optimizer.step()
                 total_loss += loss.item()
             avg_loss = total_loss / len(loader)
-            print(f"微调 Epoch {epoch + 1}/{epochs}, 平均损失: {avg_loss:.4f}")
+            print(f"Fine-tune Epoch {epoch + 1}/{epochs}, average loss: {avg_loss:.4f}")
