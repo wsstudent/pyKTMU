@@ -36,11 +36,11 @@ uv venv
 
 # Activate the environment
 # Windows
-.\.venv\Scriptsctivate
+.\.venv\Scripts\activate
 
 # macOS / Linux
 source .venv/bin/activate
-```
+````
 
 ### Install dependencies
 
@@ -49,7 +49,6 @@ All dependencies are defined in `pyproject.toml`. Install with:
 ```bash
 uv pip install -e .
 ```
-
 ---
 
 ## 🚀 Quick Start
@@ -65,7 +64,10 @@ cd examples
 Use `examples/data_preprocess.py` to process raw data and generate the retain and forget splits for unlearning experiments.
 
 ```bash
-python data_preprocess.py     --dataset_name assist2009     --gen_forget_data     --forget_ratio 0.2
+python data_preprocess.py \
+    --dataset_name assist2009 \
+    --gen_forget_data \
+    --forget_ratio 0.2 \
 ```
 
 **Arguments:**
@@ -99,7 +101,12 @@ The examples below demonstrate how **DKT** uses various unlearning methods. For 
 #### A. Standard Training
 
 ```bash
-python wandb_dkt_train.py     --dataset_name assist2009     --save_dir saved_model     --seed 42     --fold 0     --use_wandb 1
+python wandb_dkt_train.py \
+    --dataset_name assist2009 \
+    --save_dir saved_model \
+    --seed 42 \
+    --fold 0 \
+    --use_wandb 1
 ```
 
 #### B. Machine Unlearning
@@ -109,13 +116,27 @@ Choose an unlearning strategy with `--unlearn_method`:
 ##### Example 1: `retrain`
 
 ```bash
-python wandb_dkt_train.py     --dataset_name assist2009     --unlearn_method retrain     --unlearn_strategy random     --forget_ratio 0.2     --save_dir saved_model/unlearning     --use_wandb 1
+python wandb_dkt_train.py \
+    --dataset_name assist2009 \
+    --unlearn_method retrain \
+    --unlearn_strategy random \
+    --forget_ratio 0.2 \
+    --save_dir saved_model/unlearning \
+    --use_wandb 1
 ```
 
 ##### Example 2: `surgical` / `gradient_ascent` / `finetune`
 
 ```bash
-python wandb_dkt_train.py     --dataset_name assist2009     --unlearn_method surgical     --model_ckpt_path saved_model/dkt_assist2009_seed42_fold0     --alpha 10.0     --unlearn_strategy random     --forget_ratio 0.2     --save_dir saved_model/unlearning     --use_wandb 1
+python wandb_dkt_train.py \
+    --dataset_name assist2009 \
+    --unlearn_method surgical \
+    --model_ckpt_path saved_model/dkt_assist2009_seed42_fold0 \
+    --alpha 10.0 \
+    --unlearn_strategy random \
+    --forget_ratio 0.2 \
+    --save_dir saved_model/unlearning \
+    --use_wandb 1
 ```
 
 **Key arguments:**
@@ -133,7 +154,12 @@ python wandb_dkt_train.py     --dataset_name assist2009     --unlearn_method sur
 Use `examples/wandb_predict.py` to evaluate model performance on different test splits.
 
 ```bash
-python wandb_predict.py     --save_dir saved_model/unlearning/surgical_dkt_assist2009...     --unlearn_strategy random     --forget_ratio 0.2     --unlearn_test_file forget     --use_wandb 1
+python wandb_predict.py \
+    --save_dir saved_model/unlearning/surgical_dkt_assist2009... \
+    --unlearn_strategy random \
+    --forget_ratio 0.2 \
+    --unlearn_test_file forget \
+    --use_wandb 1
 ```
 
 **Arguments:**
@@ -141,7 +167,7 @@ python wandb_predict.py     --save_dir saved_model/unlearning/surgical_dkt_assis
 - `--save_dir`: model directory
 - `--unlearn_strategy`: data split strategy (e.g., `random`)
 - `--forget_ratio`: forget ratio
-- `--unlearn_test_file`: `forget` for the forget set, `retain` for the retain set; leave empty to evaluate on the original test set
+- `--unlearn_test_file`: `forget` for the forget set, `retain` for the retain set
 
 ---
 
