@@ -7,9 +7,11 @@ This project is a secondary development of [pyKT](https://github.com/pykt-team/p
 ## 🔧 Key Features
 
 - 🤖 **Machine Unlearning**  
-Supports four representative unlearning approaches aligned with educational data deletion tasks:
+Supports four representative unlearning approaches aligned with educational data deletion tasks,  
+as proposed and evaluated in our paper:  
+**NeuS: A Neural Suppression-based Unlearning Mechanism for Privacy-preserving Knowledge Tracing**.
 
-| `--unlearn_method` | Corresponding Method | Description |
+| `unlearn_method` | Corresponding Method | Description |
 |--------------------|----------------------|-------------|
 | `retrain`          | Retraining           | Rebuild the model from scratch using only the retain set $D_r$; serves as the gold standard for unlearning completeness. |
 | `finetune`         | Fine-tuning          | Freeze selected layers and fine-tune remaining parameters on $D_r$; efficient but may not fully erase sensitive information. |
