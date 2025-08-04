@@ -84,7 +84,6 @@ python data_preprocess.py \
 * `test_sequences_forget_{strategy}_ratio{ratio}.csv`
 
 支持的策略：
-  - random: 随机选择用户进行遗忘
   - low_performance: 选择低表现用户进行遗忘
   - high_performance: 选择高表现用户进行遗忘  
   - low_engagement: 选择低参与度用户进行遗忘
@@ -105,9 +104,8 @@ python data_preprocess.py \
 python wandb_dkt_train.py \
     --dataset_name assist2009 \
     --save_dir saved_model \
-    --seed 42 \
     --fold 0 \
-    --use_wandb 1
+    --use_wandb 0
 ```
 
 #### B. 机器遗忘
@@ -120,10 +118,10 @@ python wandb_dkt_train.py \
 python wandb_dkt_train.py \
     --dataset_name assist2009 \
     --unlearn_method retrain \
-    --unlearn_strategy random \
+    --unlearn_strategy low_performance \
     --forget_ratio 0.2 \
     --save_dir saved_model/unlearning \
-    --use_wandb 1
+    --use_wandb 0
 ```
 
 ##### 示例 2：Surgical / Ascent / Finetune
@@ -134,10 +132,10 @@ python wandb_dkt_train.py \
     --unlearn_method surgical \
     --model_ckpt_path saved_model/dkt_assist2009_seed42_fold0 \
     --alpha 10.0 \
-    --unlearn_strategy random \
+    --unlearn_strategy low_performance \
     --forget_ratio 0.2 \
     --save_dir saved_model/unlearning \
-    --use_wandb 1
+    --use_wandb 0
 ```
 
 #### 关键参数说明：
@@ -157,16 +155,16 @@ python wandb_dkt_train.py \
 ```bash
 python wandb_predict.py \
     --save_dir saved_model/unlearning/surgical_dkt_assist2009... \
-    --unlearn_strategy random \
+    --unlearn_strategy low_performance \
     --forget_ratio 0.2 \
     --unlearn_test_file forget \
-    --use_wandb 1
+    --use_wandb 0
 ```
 
 #### 参数说明：
 
 * `--save_dir`: 模型存储路径
-* `--unlearn_strategy`: 数据划分策略（如 `random`）
+* `--unlearn_strategy`: 数据划分策略（如 `low_performance`）
 * `--forget_ratio`: 遗忘比例
 * `--unlearn_test_file`: `forget` 表示遗忘集，`retain` 表示保留集
 
