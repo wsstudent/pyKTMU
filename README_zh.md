@@ -168,7 +168,7 @@ python wandb_predict.py \
 * `--save_dir`: 模型存储路径
 * `--unlearn_strategy`: 数据划分策略（如 `random`）
 * `--forget_ratio`: 遗忘比例
-* `--unlearn_test_file`: `forget` 表示遗忘集，`retain` 表示保留集，留空则评估原始测试集
+* `--unlearn_test_file`: `forget` 表示遗忘集，`retain` 表示保留集
 
 ---
 
