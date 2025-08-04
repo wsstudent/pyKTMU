@@ -7,11 +7,14 @@ This project is a secondary development of [pyKT](https://github.com/pykt-team/p
 ## 🔧 Key Features
 
 - 🤖 **Machine Unlearning**  
-  Integrates multiple state-of-the-art unlearning algorithms, including:
-  - `retrain`
-  - `finetune`
-  - `surgical`
-  - `gradient_ascent`
+Supports four representative unlearning approaches aligned with educational data deletion tasks:
+
+| `--unlearn_method` | Corresponding Method | Description |
+|--------------------|----------------------|-------------|
+| `retrain`          | Retraining           | Rebuild the model from scratch using only the retain set $D_r$; serves as the gold standard for unlearning completeness. |
+| `finetune`         | Fine-tuning          | Freeze selected layers and fine-tune remaining parameters on $D_r$; efficient but may not fully erase sensitive information. |
+| `surgical`         | NeuS (ours)          | A fine-grained method that suppresses parameters sensitive to the forget set, guided by Fisher Information and retain-aware sensitivity factors. |
+| `gradient_ascent`  | Naïve Fisher         | Applies gradient ascent using Fisher scores computed on the forget set alone; a baseline for analyzing forgetting sensitivity. |
 
 - 📊 **End-to-End Workflow**  
   Provides a **full set of scripts** covering data preprocessing (generating retain/forget splits), model training/unlearning, and final evaluation.
@@ -84,12 +87,12 @@ python data_preprocess.py \
 - `test_sequences_forget_{strategy}_ratio{ratio}.csv`
 
 **Supported strategies:**
-
-- `random`: randomly select users to forget  
+  
 - `low_performance`: forget users with low performance  
 - `high_performance`: forget users with high performance  
 - `low_engagement`: forget users with low engagement  
 - `unstable_performance`: forget users with unstable performance
+- `random`: randomly select users to forget
 
 ---
 
@@ -104,9 +107,8 @@ The examples below demonstrate how **DKT** uses various unlearning methods. For 
 python wandb_dkt_train.py \
     --dataset_name assist2009 \
     --save_dir saved_model \
-    --seed 42 \
     --fold 0 \
-    --use_wandb 1
+    --use_wandb 0
 ```
 
 #### B. Machine Unlearning
@@ -119,13 +121,13 @@ Choose an unlearning strategy with `--unlearn_method`:
 python wandb_dkt_train.py \
     --dataset_name assist2009 \
     --unlearn_method retrain \
-    --unlearn_strategy random \
+    --unlearn_strategy low_performance\
     --forget_ratio 0.2 \
     --save_dir saved_model/unlearning \
-    --use_wandb 1
+    --use_wandb 0
 ```
 
-##### Example 2: `surgical` / `gradient_ascent` / `finetune`
+##### Example 2: `surgical` / `ascent` / `finetune`
 
 ```bash
 python wandb_dkt_train.py \
@@ -133,7 +135,7 @@ python wandb_dkt_train.py \
     --unlearn_method surgical \
     --model_ckpt_path saved_model/dkt_assist2009_seed42_fold0 \
     --alpha 10.0 \
-    --unlearn_strategy random \
+    --unlearn_strategy low_performance \
     --forget_ratio 0.2 \
     --save_dir saved_model/unlearning \
     --use_wandb 1
@@ -161,7 +163,6 @@ python wandb_predict.py \
     --unlearn_test_file forget \
     --use_wandb 1
 ```
-
 **Arguments:**
 
 - `--save_dir`: model directory
@@ -170,6 +171,16 @@ python wandb_predict.py \
 - `--unlearn_test_file`: `forget` for the forget set, `retain` for the retain set
 
 ---
+> ✅ After each evaluation run, the results will be automatically saved to `../data/evaluation_results.csv`.  
+> If the file already exists, new results will be **appended** without overwriting previous entries.
+### 4) Privacy Risk Evaluation
+To assess the privacy risks of different unlearning strategies, this toolkit supports two common attack methods:
+Membership Inference Attack
+Determines whether a specific student's data was used during model training, implemented in pykt/utils/attacks/membership_inference.py.
+Model Inversion Attack
+Attempts to reconstruct input interactions from the model’s outputs, revealing possible private information. Implementation: pykt/utils/attacks/model_inversion.py.
+
+✅ These attacks help evaluate the privacy leakage of different models before and after unlearning.
 
 ## 📚 Citation
 
