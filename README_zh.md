@@ -7,11 +7,17 @@
 ## 🔧 核心特性
 
 - 🤖 **机器遗忘 (Machine Unlearning)**  
-  集成多种前沿的机器遗忘算法，包括：
-  - `Retrain`（重训练）
-  - `Finetune`（微调）
-  - `Surgical`（精准手术）
-  - `Gradient Ascent`（梯度上升）  
+本工具库集成了论文  
+**“NeuS: A Neural Suppression-based Unlearning Mechanism for Privacy-preserving Knowledge Tracing”**  
+中提出与评估的四种代表性遗忘方法，适用于教育数据删除任务场景。
+
+| `unlearn_method` 参数 | 对应方法名       | 方法简介 |
+|----------------------|------------------|------------------------|
+| `retrain`            | 重训练 Retraining | 使用保留集 $D_r$ 从头重新训练模型，被视为遗忘完整性的黄金标准。 |
+| `finetune`           | 微调 Fine-tuning | 冻结部分层，仅在 $D_r$ 上微调非冻结参数，效率较高但可能遗忘不彻底。 |
+| `surgical`           | NeuS（本研究方法） | 基于 Fisher 信息与保留集/遗忘集敏感度，精细抑制与遗忘集高度相关的参数。 |
+| `gradient_ascent`    | Naïve Fisher     | 仅基于遗忘集 Fisher 分数进行梯度上升，作为对比基线分析遗忘敏感性。 |
+
 
 - 📊 **端到端流程**  
   提供从数据预处理（生成遗忘集与保留集）、模型训练/遗忘到最终评估的**全套脚本**。
@@ -84,7 +90,6 @@ python data_preprocess.py \
 * `test_sequences_forget_{strategy}_ratio{ratio}.csv`
 
 支持的策略：
-  - random: 随机选择用户进行遗忘
   - low_performance: 选择低表现用户进行遗忘
   - high_performance: 选择高表现用户进行遗忘  
   - low_engagement: 选择低参与度用户进行遗忘
@@ -105,9 +110,8 @@ python data_preprocess.py \
 python wandb_dkt_train.py \
     --dataset_name assist2009 \
     --save_dir saved_model \
-    --seed 42 \
     --fold 0 \
-    --use_wandb 1
+    --use_wandb 0
 ```
 
 #### B. 机器遗忘
@@ -120,10 +124,10 @@ python wandb_dkt_train.py \
 python wandb_dkt_train.py \
     --dataset_name assist2009 \
     --unlearn_method retrain \
-    --unlearn_strategy random \
+    --unlearn_strategy low_performance \
     --forget_ratio 0.2 \
     --save_dir saved_model/unlearning \
-    --use_wandb 1
+    --use_wandb 0
 ```
 
 ##### 示例 2：Surgical / Ascent / Finetune
@@ -134,15 +138,15 @@ python wandb_dkt_train.py \
     --unlearn_method surgical \
     --model_ckpt_path saved_model/dkt_assist2009_seed42_fold0 \
     --alpha 10.0 \
-    --unlearn_strategy random \
+    --unlearn_strategy low_performance \
     --forget_ratio 0.2 \
     --save_dir saved_model/unlearning \
-    --use_wandb 1
+    --use_wandb 0
 ```
 
 #### 关键参数说明：
 
-* `--unlearn_method`: 遗忘方法（可选：`retrain`, `finetune`, `surgical`, `ascent`）
+* `--unlearn_method`: 遗忘方法（可选： `finetune`, `surgical`, `ascent`）
 * `--model_ckpt_path`: 预训练模型路径（finetune/surgical/ascent 等遗忘方法必须带上此参数）
 * `--alpha`: 遗忘强度（用于 surgical/ascent）
 * `--finetune_epochs`, `--finetune_lr`: 微调轮数与学习率
@@ -157,20 +161,32 @@ python wandb_dkt_train.py \
 ```bash
 python wandb_predict.py \
     --save_dir saved_model/unlearning/surgical_dkt_assist2009... \
-    --unlearn_strategy random \
+    --unlearn_strategy low_performance \
     --forget_ratio 0.2 \
     --unlearn_test_file forget \
-    --use_wandb 1
+    --use_wandb 0
 ```
 
 #### 参数说明：
 
 * `--save_dir`: 模型存储路径
-* `--unlearn_strategy`: 数据划分策略（如 `random`）
+* `--unlearn_strategy`: 数据划分策略（如 `low_performance`）
 * `--forget_ratio`: 遗忘比例
 * `--unlearn_test_file`: `forget` 表示遗忘集，`retain` 表示保留集
 
 ---
+#### 隐私攻击评估
+为评估遗忘方法的隐私保护能力，本项目支持两种攻击方式：
+
+成员推理攻击（Membership Inference）
+判断某学生是否出现在训练集中。
+实现路径：pykt/utils/attacks/membership_inference.py
+
+模型反演攻击（Model Inversion）
+通过模型输出反推原始输入内容，可能泄露学生隐私。
+实现路径：pykt/utils/attacks/model_inversion.py
+
+✅ 这两种攻击可用于对比不同模型在遗忘前后的隐私泄露程度。
 
 ## 📚 引用
 
