@@ -1,6 +1,5 @@
 # coding=utf-8
 """
-    @project: 机器遗忘代
     @Author：shimKang
     @file： model_inversion.py.py
     @date：2025/7/21 下午4:02
