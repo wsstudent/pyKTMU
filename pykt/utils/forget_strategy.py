@@ -4,38 +4,38 @@ from typing import Dict, List, Tuple, Union
 
 class ForgetStrategy:
     """
-    简化的遗忘策略类，专注于策略逻辑
+    Simplified forgetting strategy class focusing on strategy logic.
     
-    支持的策略：
-    - random: 随机选择用户进行遗忘
-    - low_performance: 选择低表现用户进行遗忘
-    - high_performance: 选择高表现用户进行遗忘  
-    - low_engagement: 选择低参与度用户进行遗忘
-    - unstable_performance: 选择表现不稳定的用户进行遗忘
+    Supported strategies:
+    - random: randomly select users to forget
+    - low_performance: select low-performing users to forget
+    - high_performance: select high-performing users to forget  
+    - low_engagement: select low-engagement users to forget
+    - unstable_performance: select users with unstable performance to forget
     """
     
     @staticmethod
     def select_forget_users(df: pd.DataFrame, strategy: str, forget_ratio: float = 0.2, **kwargs) -> Dict[str, List]:
         """
-        根据策略选择需要遗忘的用户
+        Select users to forget according to a strategy.
         
         Args:
-            df: 包含用户交互数据的DataFrame
-            strategy: 遗忘策略名称
-            forget_ratio: 遗忘比例 (0-1)
-            **kwargs: 策略特定参数
+            df: DataFrame containing user interaction data
+            strategy: name of the forgetting strategy
+            forget_ratio: forgetting ratio (0-1)
+            **kwargs: strategy-specific parameters
             
         Returns:
-            Dict包含:
-            - 'forget_users': 需要遗忘的用户ID列表
-            - 'retain_users': 需要保留的用户ID列表
-            - 'strategy_info': 策略详细信息
+            Dict containing:
+            - 'forget_users': list of user IDs to forget
+            - 'retain_users': list of user IDs to retain
+            - 'strategy_info': detailed information of the strategy
         """
         
-        # 计算用户统计信息
+        # Compute per-user statistics
         user_stats = ForgetStrategy._calculate_user_stats(df)
         
-        # 根据策略选择用户
+        # Strategy dispatcher
         strategy_methods = {
             'random': ForgetStrategy._random_forget,
             'low_performance': ForgetStrategy._low_performance_forget,
@@ -45,7 +45,8 @@ class ForgetStrategy:
         }
         
         if strategy not in strategy_methods:
-            raise ValueError(f"不支持的策略: {strategy}")
+            # Keep original Chinese error message to avoid changing code behavior text
+            raise ValueError(f"nsupported strategy: {strategy}")
         
         forget_users = strategy_methods[strategy](user_stats, forget_ratio, **kwargs)
         all_users = user_stats.index.tolist()
@@ -66,12 +67,12 @@ class ForgetStrategy:
     
     @staticmethod
     def _calculate_user_stats(df: pd.DataFrame) -> pd.DataFrame:
-        """计算用户统计信息"""
-        # 假设df已经是展开的交互数据，每行代表一次交互
-        # 如果是序列格式，需要先展开
+        """Compute per-user statistics."""
+        # Assume df is an expanded interaction dataset (one interaction per row).
+        # If the data is in sequence form, expand it first.
         
         if 'responses' in df.columns:
-            # 处理序列格式数据
+            # Handle sequence-format data
             expanded_data = []
             for _, row in df.iterrows():
                 uid = row['uid']
@@ -80,12 +81,12 @@ class ForgetStrategy:
                     expanded_data.append({'uid': uid, 'correct': response})
             expanded_df = pd.DataFrame(expanded_data)
         else:
-            # 已经是展开格式
+            # Already expanded
             expanded_df = df.copy()
             if 'user_id' in expanded_df.columns:
                 expanded_df['uid'] = expanded_df['user_id']
         
-        # 计算统计指标
+        # Compute metrics
         user_stats = expanded_df.groupby('uid').agg({
             'correct': ['count', 'mean', 'std']
         }).round(4)
@@ -97,7 +98,7 @@ class ForgetStrategy:
     
     @staticmethod
     def _random_forget(user_stats: pd.DataFrame, forget_ratio: float, **kwargs) -> List:
-        """随机遗忘策略"""
+        """Random forgetting strategy."""
         np.random.seed(kwargs.get('seed', 42))
         total_users = len(user_stats)
         forget_count = int(total_users * forget_ratio)
@@ -112,8 +113,8 @@ class ForgetStrategy:
     
     @staticmethod
     def _low_performance_forget(user_stats: pd.DataFrame, forget_ratio: float, **kwargs) -> List:
-        """低表现遗忘策略"""
-        # 按准确率排序，选择最低的用户
+        """Low-performance forgetting strategy."""
+        # Sort by accuracy ascending and pick the lowest group
         sorted_users = user_stats.sort_values('accuracy')
         forget_count = int(len(user_stats) * forget_ratio)
         forget_users = sorted_users.head(forget_count).index.tolist()
@@ -122,8 +123,8 @@ class ForgetStrategy:
     
     @staticmethod
     def _high_performance_forget(user_stats: pd.DataFrame, forget_ratio: float, **kwargs) -> List:
-        """高表现遗忘策略"""
-        # 按准确率排序，选择最高的用户
+        """High-performance forgetting strategy."""
+        # Sort by accuracy descending and pick the highest group
         sorted_users = user_stats.sort_values('accuracy', ascending=False)
         forget_count = int(len(user_stats) * forget_ratio)
         forget_users = sorted_users.head(forget_count).index.tolist()
@@ -132,8 +133,8 @@ class ForgetStrategy:
     
     @staticmethod
     def _low_engagement_forget(user_stats: pd.DataFrame, forget_ratio: float, **kwargs) -> List:
-        """低参与度遗忘策略"""
-        # 按交互次数排序，选择最少的用户
+        """Low-engagement forgetting strategy."""
+        # Sort by interaction count ascending and pick the least engaged users
         sorted_users = user_stats.sort_values('interaction_count')
         forget_count = int(len(user_stats) * forget_ratio)
         forget_users = sorted_users.head(forget_count).index.tolist()
@@ -142,8 +143,8 @@ class ForgetStrategy:
     
     @staticmethod
     def _unstable_performance_forget(user_stats: pd.DataFrame, forget_ratio: float, **kwargs) -> List:
-        """不稳定表现遗忘策略"""
-        # 按表现标准差排序，选择最不稳定的用户
+        """Unstable-performance forgetting strategy."""
+        # Sort by performance std descending and pick the most unstable users
         sorted_users = user_stats.sort_values('performance_std', ascending=False)
         forget_count = int(len(user_stats) * forget_ratio)
         forget_users = sorted_users.head(forget_count).index.tolist()
