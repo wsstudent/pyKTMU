@@ -1,9 +1,8 @@
 # coding=utf-8
 """
-
-    @Author：shimKang
-    @file： membership_inference.py.py
-    @date：2025/7/21 下午4:03
+    @Author: shimKang
+    @file: membership_inference.py.py
+    @date: 2025/7/21 4:03 PM
     @blogs: https://blog.csdn.net/ksm180038
 """
 import torch.nn.functional as F
@@ -12,18 +11,17 @@ from torch.utils.data import DataLoader
 import numpy as np
 from torch.utils.data import Subset
 from sklearn import metrics
+
 class MembershipInferenceAttack:
     def __init__(self, model, device='cuda'):
-        """改进版成员推演攻击类"""
+        """Improved Membership Inference Attack class"""
         self.model = model.to(device)
         self.device = device
         self.model.eval()
-        self.temperature = 1.5  # 新增温度缩放参数
-
+        self.temperature = 1.5  # Added temperature scaling parameter
 
     def _get_combined_features(self, data_loader):
-
-        """获取联合特征（损失值+校准后置信度）"""
+        """Obtain combined features (loss + calibrated confidence)"""
         losses = []
         confidences = []
 
@@ -33,18 +31,18 @@ class MembershipInferenceAttack:
                 q, r, qshft, rshft = q.to(self.device), r.to(self.device), qshft.to(self.device), rshft.to(self.device)
                 mask = mask.to(self.device).bool()
 
-                # 前向传播
+                # Forward pass
                 pred = self.model(q, r)
                 y_pred = torch.gather(pred, 2, qshft.unsqueeze(2)).squeeze(2)
 
-                # 应用温度缩放校准置信度
+                # Apply temperature scaling to calibrate confidence
                 calibrated_pred = torch.sigmoid(torch.log(y_pred / (1 - y_pred)) / self.temperature)
 
-                # 计算特征
+                # Compute features
                 loss = F.binary_cross_entropy(calibrated_pred, rshft.float().to(self.device), reduction='none')
-                confidence = torch.abs(calibrated_pred - 0.5)  # 校准后置信度
+                confidence = torch.abs(calibrated_pred - 0.5)  # Calibrated confidence
 
-                # 按样本处理
+                # Process per sample
                 batch_size = q.size(0)
                 for i in range(batch_size):
                     sample_mask = mask[i]
@@ -60,23 +58,23 @@ class MembershipInferenceAttack:
         return np.array(losses), np.array(confidences)
 
     def evaluate_attack(self, member_loader, non_member_loader, n_runs=5):
-        """稳定性遗忘评估（自动平衡数据集）"""
+        """Stability-focused forgetting evaluation (auto-balanced datasets)"""
         auc_list = []
         acc_list = []
 
         for _ in range(n_runs):
-            # 动态采样平衡数据集
+            # Dynamically sample to balance datasets
             balanced_member = self._resample_loader(member_loader)
             balanced_non_member = self._resample_loader(non_member_loader)
 
-            # 获取特征
+            # Extract features
             member_loss, member_conf = self._get_combined_features(balanced_member)
             non_member_loss, non_member_conf = self._get_combined_features(balanced_non_member)
 
-            # 生成平衡评分
+            # Generate balanced scores
             scores = self._generate_scores(member_loss, member_conf, non_member_loss, non_member_conf)
 
-            # 计算指标
+            # Compute metrics
             labels = np.concatenate([np.ones_like(member_loss), np.zeros_like(non_member_loss)])
             auc = metrics.roc_auc_score(labels, scores)
             acc = metrics.accuracy_score(labels, (scores >= 0.5).astype(int))
@@ -92,7 +90,7 @@ class MembershipInferenceAttack:
         }
 
     def _resample_loader(self, loader):
-        """数据重采样（平衡序列长度分布）"""
+        """Data resampling (balance sequence-length distribution)"""
         indices = np.random.choice(
             range(len(loader.dataset)),
             size=len(loader.dataset),
@@ -105,15 +103,15 @@ class MembershipInferenceAttack:
         )
 
     def _generate_scores(self, member_loss, member_conf, non_member_loss, non_member_conf):
-        """生成稳定性评分"""
-        # 标准化处理
+        """Generate stability scores"""
+        # Standardization
         all_loss = np.concatenate([member_loss, non_member_loss])
         all_conf = np.concatenate([member_conf, non_member_conf])
 
         loss_mean, loss_std = np.mean(all_loss), np.std(all_loss)
         conf_mean, conf_std = np.mean(all_conf), np.std(all_conf)
 
-        # 计算标准化得分
+        # Compute standardized scores
         member_scores = (member_conf - conf_mean)/conf_std - (member_loss - loss_mean)/loss_std
         non_member_scores = (non_member_conf - conf_mean)/conf_std - (non_member_loss - loss_mean)/loss_std
 
