@@ -145,7 +145,7 @@ python wandb_dkt_train.py \
 
 **Key arguments:**
 
-- `--unlearn_method`: one of `{retrain, finetune, surgical, ascent}`
+- `--unlearn_method`: one of `{finetune, surgical, ascent}`
 - `--model_ckpt_path`: path to a pretrained checkpoint (required for `finetune`/`surgical`/`ascent`)
 - `--alpha`: unlearning strength (used by `surgical` / `ascent`)
 - `--finetune_epochs`, `--finetune_lr`: epochs and learning rate for fine-tuning
@@ -160,7 +160,7 @@ Use `examples/wandb_predict.py` to evaluate model performance on different test 
 ```bash
 python wandb_predict.py \
     --save_dir saved_model/unlearning/surgical_dkt_assist2009... \
-    --unlearn_strategy random \
+    --unlearn_strategy low_performance \
     --forget_ratio 0.2 \
     --unlearn_test_file forget \
     --use_wandb 1
@@ -168,7 +168,7 @@ python wandb_predict.py \
 **Arguments:**
 
 - `--save_dir`: model directory
-- `--unlearn_strategy`: data split strategy (e.g., `random`)
+- `--unlearn_strategy`: data split strategy (e.g., `low_performance`)
 - `--forget_ratio`: forget ratio
 - `--unlearn_test_file`: `forget` for the forget set, `retain` for the retain set
 
